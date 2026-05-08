@@ -1,7 +1,7 @@
 {
   "id": "claude-remote",
   "name": "Claude Remote",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "minNoctaliaVersion": "3.6.0",
   "author": "Jack",
   "description": "Runs claude remote-control in the background and shows live status in the bar",
@@ -9,12 +9,15 @@
   "entryPoints": {
     "main": "Main.qml",
     "barWidget": "BarWidget.qml",
-    "panel": "Panel.qml"
+    "panel": "Panel.qml",
+    "settings": "Settings.qml"
   },
   "dependencies": {
     "plugins": []
   },
   "metadata": {
-    "defaultSettings": {}
+    "defaultSettings": {
+      "sessionName": "Remote Session"
+    }
   }
 }

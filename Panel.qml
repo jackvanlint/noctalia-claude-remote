@@ -11,23 +11,23 @@ Item {
     property var pluginApi: null
     readonly property var  geometryPlaceholder:   panelContainer
     readonly property bool allowAttach:            true
-    property real contentPreferredWidth:  360 * Style.uiScaleRatio
-    property real contentPreferredHeight: 220 * Style.uiScaleRatio
+    property real contentPreferredWidth: 380 * Style.uiScaleRatio
+    property real contentPreferredHeight: Math.max(220,
+        180 + namedCount * 38 + (namedCount > 0 ? 52 : 0) + 52) * Style.uiScaleRatio
 
-    readonly property var    main:     pluginApi?.mainInstance
-    readonly property string rcStatus: main?.rcStatus ?? "stopped"
+    readonly property var    main:       pluginApi?.mainInstance
+    readonly property string rcStatus:   main?.rcStatus ?? "stopped"
+    readonly property var    named:      main?.namedSessions ?? []
+    readonly property int    namedCount: named.length
 
     Rectangle {
         id: panelContainer
         anchors.fill: parent
-        color:        Color.mSurface
-        radius:       Style.radiusL
+        color:  Color.mSurface
+        radius: Style.radiusL
 
         ColumnLayout {
-            anchors {
-                fill:    parent
-                margins: Style.marginL
-            }
+            anchors { fill: parent; margins: Style.marginL }
             spacing: Style.marginM
 
             // ── Header ────────────────────────────────────────────────────
@@ -35,124 +35,131 @@ Item {
                 Layout.fillWidth: true
                 spacing: Style.marginS
 
-                NIcon {
-                    icon:      "brain"
-                    color:     rcStatus === "connected" ? Color.mPrimary : Color.mOnSurfaceVariant
-                    pointSize: Style.fontSizeXL
-                }
+                NIcon { icon: "brain"; color: rcStatus === "connected" ? Color.mPrimary : Color.mOnSurfaceVariant; pointSize: Style.fontSizeXL }
 
                 NText {
-                    text:       "Claude Remote"
-                    pointSize:  Style.fontSizeL
+                    text: "Claude Remote"
+                    pointSize: Style.fontSizeL
                     font.weight: Style.fontWeightSemiBold
-                    color:      Color.mOnSurface
+                    color: Color.mOnSurface
                     Layout.fillWidth: true
                 }
 
                 Rectangle {
-                    width:  statusLabel.implicitWidth + Style.marginM * 2
-                    height: statusLabel.implicitHeight + Style.marginXS * 2
+                    width:  badge.implicitWidth + Style.marginM * 2
+                    height: badge.implicitHeight + Style.marginXS * 2
                     radius: Style.radiusS
-                    color: {
-                        switch (rcStatus) {
-                            case "connected":  return "#1e4620"
-                            case "connecting": return "#4a3200"
-                            default:           return "#4a1212"
-                        }
-                    }
+                    color: rcStatus === "connected" ? "#1e4620" : rcStatus === "connecting" ? "#4a3200" : "#4a1212"
 
                     NText {
-                        id: statusLabel
+                        id: badge
                         anchors.centerIn: parent
-                        text: {
-                            switch (rcStatus) {
-                                case "connected":  return "Connected"
-                                case "connecting": return "Connecting…"
-                                default:           return "Stopped"
-                            }
-                        }
+                        text: rcStatus === "connected" ? "Connected" : rcStatus === "connecting" ? "Connecting…" : "Stopped"
                         pointSize: Style.fontSizeS
-                        color: {
-                            switch (rcStatus) {
-                                case "connected":  return "#81c784"
-                                case "connecting": return "#ffb74d"
-                                default:           return "#ef9a9a"
-                            }
-                        }
+                        color: rcStatus === "connected" ? "#81c784" : rcStatus === "connecting" ? "#ffb74d" : "#ef9a9a"
                     }
                 }
             }
 
             NDivider {}
 
-            // ── Session info ──────────────────────────────────────────────
-            ColumnLayout {
+            // ── Primary session info ──────────────────────────────────────
+            RowLayout {
                 Layout.fillWidth: true
-                spacing: Style.marginXS
+                spacing: Style.marginS
                 visible: rcStatus === "connected"
 
-                RowLayout {
-                    Layout.fillWidth: true
-                    spacing: Style.marginS
-                    visible: (main?.sessionName ?? "") !== ""
-
-                    NIcon { icon: "tag"; pointSize: Style.fontSizeM; color: Color.mOnSurfaceVariant }
-                    NText {
-                        text:       main?.sessionName ?? ""
-                        pointSize:  Style.fontSizeM
-                        color:      Color.mOnSurface
-                        Layout.fillWidth: true
-                        elide:      Text.ElideRight
+                NIcon { icon: "circles-relation"; pointSize: Style.fontSizeM; color: Color.mOnSurfaceVariant }
+                NText {
+                    text: {
+                        var n = main?.activeSessions ?? 0
+                        var m = main?.maxSessions ?? 32
+                        return n + " / " + m + " concurrent sessions"
                     }
-                }
-
-                RowLayout {
-                    Layout.fillWidth: true
-                    spacing: Style.marginS
-
-                    NIcon { icon: "circles-relation"; pointSize: Style.fontSizeM; color: Color.mOnSurfaceVariant }
-                    NText {
-                        text: {
-                            var n = main?.activeSessions ?? 0
-                            var m = main?.maxSessions ?? 32
-                            return n + " / " + m + " sessions"
-                        }
-                        pointSize: Style.fontSizeM
-                        color:     Color.mOnSurface
-                    }
+                    pointSize: Style.fontSizeM
+                    color: Color.mOnSurface
                 }
             }
 
             NText {
-                visible:   rcStatus !== "connected"
-                text:      rcStatus === "connecting" ? "Establishing connection…" : "Daemon is not running"
+                visible: rcStatus !== "connected"
+                text: rcStatus === "connecting" ? "Establishing connection…" : "Daemon is not running"
                 pointSize: Style.fontSizeM
-                color:     Color.mOnSurfaceVariant
+                color: Color.mOnSurfaceVariant
                 Layout.fillWidth: true
+            }
+
+            // ── Named sessions list ───────────────────────────────────────
+            ColumnLayout {
+                Layout.fillWidth: true
+                spacing: Style.marginXS
+                visible: namedCount > 0
+
+                NDivider {}
+
+                NText {
+                    text: "Named Sessions"
+                    pointSize: Style.fontSizeS
+                    color: Color.mOnSurfaceVariant
+                    font.weight: Style.fontWeightSemiBold
+                }
+
+                Repeater {
+                    model: named
+                    delegate: RowLayout {
+                        Layout.fillWidth: true
+                        spacing: Style.marginS
+
+                        Rectangle { width: 6; height: 6; radius: 3; color: "#4caf50" }
+
+                        NText {
+                            text: modelData.name
+                            pointSize: Style.fontSizeM
+                            color: Color.mOnSurface
+                            Layout.fillWidth: true
+                            elide: Text.ElideRight
+                        }
+
+                        NButton {
+                            text: "Stop"
+                            icon: "player-stop"
+                            outlined: true
+                            Layout.preferredWidth: 72 * Style.uiScaleRatio
+                            backgroundColor: Color.mErrorContainer
+                            textColor: Color.mOnErrorContainer
+                            onClicked: main?.removeNamedSession(modelData.pid)
+                        }
+                    }
+                }
+            }
+
+            // ── New named session ─────────────────────────────────────────
+            NDivider {}
+
+            NButton {
+                Layout.fillWidth: true
+                text: "New Session"
+                icon: "plus"
+                onClicked: {
+                    var now = new Date()
+                    var hhmm = now.getHours().toString().padStart(2, "0") + ":" + now.getMinutes().toString().padStart(2, "0")
+                    main?.addNamedSession("Remote Session: " + hhmm)
+                }
             }
 
             Item { Layout.fillHeight: true }
 
-            // ── Action buttons ────────────────────────────────────────────
+            // ── Footer actions ────────────────────────────────────────────
             RowLayout {
                 Layout.fillWidth: true
                 spacing: Style.marginS
 
                 NButton {
                     Layout.fillWidth: true
-                    text:     "Open claude.ai/code"
-                    icon:     "external-link"
-                    enabled:  rcStatus === "connected" && (main?.envUrl ?? "") !== ""
                     outlined: true
-                    onClicked: Qt.openUrlExternally(main.envUrl)
-                }
-
-                NButton {
-                    Layout.preferredWidth: 90 * Style.uiScaleRatio
                     text: rcStatus === "stopped" ? "Start" : "Restart"
                     icon: rcStatus === "stopped" ? "player-play" : "refresh"
-                    backgroundColor: rcStatus === "stopped" ? Color.mPrimary : Color.mSecondaryContainer
-                    textColor:       rcStatus === "stopped" ? Color.mOnPrimary : Color.mOnSecondaryContainer
+                    textColor: rcStatus === "stopped" ? Color.mPrimary : Color.mOnSurfaceVariant
                     onClicked: {
                         if (rcStatus === "stopped") main?.start()
                         else main?.restart()
