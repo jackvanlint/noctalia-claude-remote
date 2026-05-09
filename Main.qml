@@ -19,6 +19,10 @@ Item {
 
     readonly property string configuredName:
         pluginApi?.pluginSettings?.sessionName || "Remote Session"
+    readonly property string claudeBin:
+        pluginApi?.pluginSettings?.claudeBin || "claude"
+    readonly property string scriptPath:
+        Qt.resolvedUrl("start-session.sh").toString().replace("file://", "")
 
     // ── Primary status via running-state + timer ──────────────────────────
     Timer {
@@ -81,7 +85,7 @@ Item {
     Process {
         id: rcProcess
         running: false
-        command: ["/home/jack/.local/bin/claude", "remote-control",
+        command: [root.claudeBin, "remote-control",
                   "--name", root.configuredName,
                   "--spawn", "session"]
 
@@ -113,8 +117,7 @@ Item {
         id: spawnProc
         property string pendingName: ""
         running: false
-        command: ["/home/jack/.config/noctalia/plugins/claude-remote/start-session.sh",
-                  pendingName]
+        command: [root.scriptPath, pendingName, root.claudeBin]
         stdout: StdioCollector {
             onStreamFinished: {
                 var pid = parseInt(text.trim());

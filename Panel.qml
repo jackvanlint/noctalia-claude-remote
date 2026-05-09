@@ -125,8 +125,7 @@ Item {
                             icon: "player-stop"
                             outlined: true
                             Layout.preferredWidth: 72 * Style.uiScaleRatio
-                            backgroundColor: Color.mErrorContainer
-                            textColor: Color.mOnErrorContainer
+                            textColor: Color.mError
                             onClicked: main?.removeNamedSession(modelData.pid)
                         }
                     }
