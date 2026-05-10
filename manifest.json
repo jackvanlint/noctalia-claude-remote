@@ -3,7 +3,7 @@
   "name": "Claude Remote",
   "version": "1.3.0",
   "minNoctaliaVersion": "3.6.0",
-  "author": "Jack",
+  "author": "Jack Vanlint <277274540+jackvanlint@users.noreply.github.com>",
   "description": "Runs claude remote-control in the background and shows live status in the bar",
   "tags": ["Bar", "Panel", "Development"],
   "entryPoints": {
