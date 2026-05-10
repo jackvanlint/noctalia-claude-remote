@@ -16,6 +16,37 @@ Item {
     // ── Named extra sessions: [{name, pid}] ───────────────────────────────
     property var namedSessions: []
 
+    // ── Skills: [{name, description}] ────────────────────────────────────
+    property var skills: []
+    property var favourites: []
+
+    readonly property var sortedSkills: {
+        var favSet = new Set(favourites)
+        var favs = skills.filter(function(s) { return favSet.has(s.name) })
+        var rest = skills.filter(function(s) { return !favSet.has(s.name) })
+        return favs.concat(rest)
+    }
+
+    onPluginApiChanged: {
+        if (!pluginApi) return
+        var raw = pluginApi.pluginSettings?.favouriteSkills
+        if (!raw) return
+        if (Array.isArray(raw)) root.favourites = raw.slice()
+        else try { root.favourites = JSON.parse(raw) } catch(e) {}
+    }
+
+    function toggleFavourite(name) {
+        var favs = favourites.slice()
+        var idx = favs.indexOf(name)
+        if (idx >= 0) favs.splice(idx, 1)
+        else favs.push(name)
+        root.favourites = favs
+        if (pluginApi) {
+            pluginApi.pluginSettings.favouriteSkills = favs
+            pluginApi.saveSettings()
+        }
+    }
+
 
     readonly property string configuredName:
         pluginApi?.pluginSettings?.sessionName || "Remote Session"
@@ -180,6 +211,44 @@ Item {
         }
     }
 
+    // ── Skill discovery ──────────────────────────────────────────────────
+    Process {
+        id: skillLister
+        running: false
+        command: ["sh", "-c",
+            "for f in ~/.claude/commands/*.md; do " +
+            "  [ -f \"$f\" ] || continue; " +
+            "  name=$(basename \"$f\" .md); " +
+            "  desc=$(grep -m1 '^description:' \"$f\" | sed 's/^description: *//'); " +
+            "  [ -z \"$desc\" ] && desc=$(head -1 \"$f\" | sed 's/^#* *//' | cut -c1-60); " +
+            "  detail=$(awk 'BEGIN{f=0;c=0} /^---$/{f++;next} f==1{next} /^#/{next} NF{printf \"%s \",\$0; c++; if(c>=4) exit}' \"$f\" | sed 's/  */ /g' | cut -c1-300); " +
+            "  [ -z \"$detail\" ] && detail=\"$desc\"; " +
+            "  printf '%s\\x01%s\\x01%s\\n' \"$name\" \"$desc\" \"$detail\"; " +
+            "done"
+        ]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                var lines = text.trim().split("\n").filter(function(l) { return l.length > 0; })
+                root.skills = lines.map(function(l) {
+                    var parts = l.split("\x01")
+                    return { name: parts[0] || "", description: parts[1] || "", detail: parts[2] || parts[1] || "" }
+                })
+            }
+        }
+    }
+
+    function runSkill(name) {
+        skillRunner.skillName = name
+        skillRunner.running = true
+    }
+
+    Process {
+        id: skillRunner
+        property string skillName: ""
+        running: false
+        command: ["kitty", "--", "claude", "/" + skillName]
+    }
+
     // ── Controls ──────────────────────────────────────────────────────────
     property bool _pendingRestart: false
 
@@ -190,5 +259,6 @@ Item {
     Component.onCompleted: {
         Logger.i("ClaudeRemote", "Main loaded — starting '" + root.configuredName + "'");
         rcProcess.running = true;
+        skillLister.running = true;
     }
 }
