@@ -5,6 +5,7 @@ Only runs when CLAUDE_REMOTE_SESSION=1 is set in the environment.
 """
 import json
 import os
+import pathlib
 import sys
 import urllib.request
 
@@ -33,7 +34,14 @@ def main():
     session_id = data.get("session_id", "")
     transcript_path = data.get("transcript_path", "")
 
-    if not session_id or not transcript_path or not os.path.exists(transcript_path):
+    if not session_id or not transcript_path:
+        sys.exit(0)
+
+    allowed_prefix = pathlib.Path.home() / ".claude"
+    if not pathlib.Path(transcript_path).resolve().is_relative_to(allowed_prefix):
+        sys.exit(0)
+
+    if not os.path.exists(transcript_path):
         sys.exit(0)
 
     entries = []

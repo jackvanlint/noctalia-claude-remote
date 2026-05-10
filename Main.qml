@@ -246,7 +246,7 @@ Item {
         id: skillRunner
         property string skillName: ""
         running: false
-        command: ["kitty", "--", "claude", "/" + skillName]
+        command: ["kitty", "--", root.claudeBin, "/" + skillName]
     }
 
     // ── Controls ──────────────────────────────────────────────────────────
