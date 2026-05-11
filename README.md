@@ -1,6 +1,6 @@
 # noctalia-claude-remote
 
-[![Latest Release](https://img.shields.io/github/v/release/jackvanlint/noctalia-claude-remote)](https://github.com/jackvanlint/noctalia-claude-remote/releases/latest)
+[![Latest Release](https://img.shields.io/github/v/release/jackvanlint/noctalia-claude-remote?cacheSeconds=0)](https://github.com/jackvanlint/noctalia-claude-remote/releases/latest)
 [⬇ Download v1.4.0](https://github.com/jackvanlint/noctalia-claude-remote/archive/refs/tags/v1.4.0.zip)
 
 A [Noctalia](https://github.com/noctalia-dev/noctalia) bar plugin that runs `claude remote-control` as a persistent background daemon and exposes a live status widget and panel for managing Claude Code sessions and skills.
