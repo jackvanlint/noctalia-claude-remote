@@ -106,6 +106,7 @@ Item {
             ColumnLayout {
                 Layout.fillWidth: true
                 spacing: Style.marginS
+                visible: main?.showUsage ?? true
 
                 NText {
                     text: "Rate Limit Usage"
@@ -257,7 +258,7 @@ Item {
                 }
             }
 
-            NDivider {}
+            NDivider { visible: main?.showUsage ?? true }
 
             // ── Max sessions warning ──────────────────────────────────────
             RowLayout {

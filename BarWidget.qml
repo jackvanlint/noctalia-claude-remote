@@ -1,4 +1,6 @@
 import QtQuick
+import QtQuick.Layouts
+import QtQuick.Controls as QQC
 import Quickshell
 import qs.Commons
 import qs.Modules.Bar.Extras
@@ -116,16 +118,212 @@ Item {
         }
     }
 
+    // ── Right-click context menu ──────────────────────────────────────────
+    QQC.Popup {
+        id: contextMenu
+        parent: root
+        x: 0
+        y: root.height + 4
+        padding: 0
+        closePolicy: QQC.Popup.CloseOnEscape | QQC.Popup.CloseOnPressOutside
+
+        background: Rectangle {
+            color:        Color.mSurface
+            radius:       Style.radiusM
+            border.color: Color.mOutline
+            border.width: Style.borderS
+        }
+
+        contentItem: ColumnLayout {
+            spacing: 0
+            width: 200 * Style.uiScaleRatio
+
+            // ── Toggle: Auto-start on login ───────────────────────────────
+            Item {
+                Layout.fillWidth: true
+                implicitHeight: 40 * Style.uiScaleRatio
+
+                Rectangle {
+                    anchors.fill: parent
+                    radius: Style.radiusM
+                    color: autoStartHover.containsMouse ? Color.mHover : "transparent"
+                }
+
+                RowLayout {
+                    anchors {
+                        left: parent.left; right: parent.right
+                        verticalCenter: parent.verticalCenter
+                        leftMargin: Style.marginM; rightMargin: Style.marginM
+                    }
+                    spacing: Style.marginS
+
+                    NText {
+                        text: "Auto-start on login"
+                        pointSize: Style.fontSizeM
+                        color: Color.mOnSurface
+                        Layout.fillWidth: true
+                    }
+
+                    // Toggle switch
+                    Rectangle {
+                        width: 28 * Style.uiScaleRatio
+                        height: 16 * Style.uiScaleRatio
+                        radius: height / 2
+                        color: (main?.autoStart ?? true) ? Color.mPrimary : Color.mSurfaceVariant
+
+                        Behavior on color { ColorAnimation { duration: 120 } }
+
+                        Rectangle {
+                            width: 12 * Style.uiScaleRatio
+                            height: 12 * Style.uiScaleRatio
+                            radius: height / 2
+                            color: "white"
+                            anchors.verticalCenter: parent.verticalCenter
+                            x: (main?.autoStart ?? true) ? parent.width - width - 2 : 2
+
+                            Behavior on x { NumberAnimation { duration: 120; easing.type: Easing.InOutQuad } }
+                        }
+                    }
+                }
+
+                MouseArea {
+                    id: autoStartHover
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: main?.toggleAutoStart()
+                }
+            }
+
+            // ── Toggle: Show usage bars ───────────────────────────────────
+            Item {
+                Layout.fillWidth: true
+                implicitHeight: 40 * Style.uiScaleRatio
+
+                Rectangle {
+                    anchors.fill: parent
+                    radius: Style.radiusM
+                    color: showUsageHover.containsMouse ? Color.mHover : "transparent"
+                }
+
+                RowLayout {
+                    anchors {
+                        left: parent.left; right: parent.right
+                        verticalCenter: parent.verticalCenter
+                        leftMargin: Style.marginM; rightMargin: Style.marginM
+                    }
+                    spacing: Style.marginS
+
+                    NText {
+                        text: "Show usage bars"
+                        pointSize: Style.fontSizeM
+                        color: Color.mOnSurface
+                        Layout.fillWidth: true
+                    }
+
+                    Rectangle {
+                        width: 28 * Style.uiScaleRatio
+                        height: 16 * Style.uiScaleRatio
+                        radius: height / 2
+                        color: (main?.showUsage ?? true) ? Color.mPrimary : Color.mSurfaceVariant
+
+                        Behavior on color { ColorAnimation { duration: 120 } }
+
+                        Rectangle {
+                            width: 12 * Style.uiScaleRatio
+                            height: 12 * Style.uiScaleRatio
+                            radius: height / 2
+                            color: "white"
+                            anchors.verticalCenter: parent.verticalCenter
+                            x: (main?.showUsage ?? true) ? parent.width - width - 2 : 2
+
+                            Behavior on x { NumberAnimation { duration: 120; easing.type: Easing.InOutQuad } }
+                        }
+                    }
+                }
+
+                MouseArea {
+                    id: showUsageHover
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: main?.toggleShowUsage()
+                }
+            }
+
+            // ── Separator ─────────────────────────────────────────────────
+            Rectangle {
+                Layout.fillWidth: true
+                height: Style.borderS
+                color: Color.mOutline
+                opacity: 0.6
+            }
+
+            // ── Action: Start / Stop ──────────────────────────────────────
+            Item {
+                Layout.fillWidth: true
+                implicitHeight: 40 * Style.uiScaleRatio
+
+                Rectangle {
+                    anchors.fill: parent
+                    radius: Style.radiusM
+                    color: startStopHover.containsMouse ? Color.mHover : "transparent"
+                }
+
+                RowLayout {
+                    anchors {
+                        left: parent.left; right: parent.right
+                        verticalCenter: parent.verticalCenter
+                        leftMargin: Style.marginM; rightMargin: Style.marginM
+                    }
+                    spacing: Style.marginS
+
+                    NIcon {
+                        icon: rcStatus === "stopped" ? "player-play" : "player-stop"
+                        pointSize: Style.fontSizeM
+                        color: rcStatus === "stopped" ? Color.mPrimary : Color.mError
+                    }
+
+                    NText {
+                        text: rcStatus === "stopped" ? "Start daemon" : "Stop daemon"
+                        pointSize: Style.fontSizeM
+                        color: rcStatus === "stopped" ? Color.mPrimary : Color.mError
+                        Layout.fillWidth: true
+                    }
+                }
+
+                MouseArea {
+                    id: startStopHover
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: {
+                        if (rcStatus === "stopped") main?.start()
+                        else main?.stop()
+                        contextMenu.close()
+                    }
+                }
+            }
+        }
+    }
+
     // ── Interaction ───────────────────────────────────────────────────────
     MouseArea {
-        anchors.fill:  parent
-        hoverEnabled:  true
-        cursorShape:   Qt.PointingHandCursor
+        anchors.fill:    parent
+        hoverEnabled:    true
+        cursorShape:     Qt.PointingHandCursor
+        acceptedButtons: Qt.LeftButton | Qt.RightButton
 
         onEntered:  { root.hovering = true;  root.entered() }
         onExited:   { root.hovering = false; root.exited()  }
 
-        onClicked:      { if (pluginApi) pluginApi.openPanel(root.screen, this) }
+        onClicked: (mouse) => {
+            if (mouse.button === Qt.RightButton) {
+                contextMenu.open()
+            } else {
+                if (pluginApi) pluginApi.openPanel(root.screen, this)
+            }
+        }
         onPressAndHold: root.rightClicked()
         onWheel: (wheel) => root.wheel(wheel.angleDelta.y)
     }

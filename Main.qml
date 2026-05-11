@@ -104,6 +104,22 @@ Item {
         pluginApi?.pluginSettings?.terminalBin || "kitty"
     readonly property string workspaceDir:
         pluginApi?.pluginSettings?.workspaceDir || ""
+    readonly property bool autoStart:
+        pluginApi?.pluginSettings?.autoStart ?? true
+    readonly property bool showUsage:
+        pluginApi?.pluginSettings?.showUsage ?? true
+
+    function toggleAutoStart() {
+        var val = !(pluginApi?.pluginSettings?.autoStart ?? true)
+        pluginApi.pluginSettings.autoStart = val
+        pluginApi.saveSettings()
+    }
+
+    function toggleShowUsage() {
+        var val = !(pluginApi?.pluginSettings?.showUsage ?? true)
+        pluginApi.pluginSettings.showUsage = val
+        pluginApi.saveSettings()
+    }
     readonly property string scriptPath:
         Qt.resolvedUrl("start-session.sh").toString().replace("file://", "")
 
@@ -408,9 +424,14 @@ Item {
     function openInstallPage() { openBrowserProc.running = true }
 
     Component.onCompleted: {
-        Logger.i("ClaudeRemote", "Main loaded — auto-start disabled, use button to start session");
         preflightProc.running = true;
         skillLister.running   = true;
         usageProc.running     = true;
+        if (root.autoStart) {
+            root.start();
+            Logger.i("ClaudeRemote", "Auto-start: starting daemon");
+        } else {
+            Logger.i("ClaudeRemote", "Auto-start disabled");
+        }
     }
 }
