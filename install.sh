@@ -49,6 +49,27 @@ else
     ok "claude CLI found ($(command -v claude))"
 fi
 
+if ! command -v pgrep &>/dev/null; then
+    warn "pgrep not found — session counting will not work"
+    info "Install procps-ng (Arch: sudo pacman -S procps-ng  |  Debian/Ubuntu: sudo apt install procps)"
+else
+    ok "pgrep found"
+fi
+
+if ! command -v nohup &>/dev/null; then
+    warn "nohup not found — daemon background spawning will not work"
+    info "Install coreutils (Arch: sudo pacman -S coreutils  |  Debian/Ubuntu: sudo apt install coreutils)"
+else
+    ok "nohup found"
+fi
+
+if ! command -v xdg-open &>/dev/null; then
+    warn "xdg-open not found — 'Get Claude Code' button will not open the browser"
+    info "Install xdg-utils (Arch: sudo pacman -S xdg-utils  |  Debian/Ubuntu: sudo apt install xdg-utils)"
+else
+    ok "xdg-open found"
+fi
+
 NOCTALIA_CFG="${XDG_CONFIG_HOME:-$HOME/.config}/noctalia"
 if [[ ! -d "$NOCTALIA_CFG" ]]; then
     warn "Noctalia config directory not found at $NOCTALIA_CFG"
@@ -190,11 +211,11 @@ else
   "sessionName": "Remote Session",
   "claudeBin": "claude",
   "terminalBin": "$DETECTED_TERMINAL",
-  "workspaceDir": "",
+  "workspaceDir": "~",
   "favouriteSkills": []
 }
 EOF
-    ok "Created settings.json (terminalBin: $DETECTED_TERMINAL)"
+    ok "Created settings.json (terminalBin: $DETECTED_TERMINAL, workspaceDir: ~)"
 fi
 
 # ── Done ─────────────────────────────────────────────────────────────────────
@@ -204,8 +225,11 @@ echo -e "${GREEN}${BOLD}Done.${NC}"
 echo ""
 info "Next steps:"
 info "  1. Reload Noctalia (or restart it) to pick up the new plugin."
-info "  2. Open the plugin panel and click Start to launch the daemon."
-info "  3. If the terminal or claude path are wrong, adjust them in Settings."
+info "  2. Open the plugin panel — it will check for Claude Code automatically."
+info "  3. Click Start. The panel will guide you if anything needs setting up:"
+info "       • Claude not found  → follow the in-panel install steps"
+info "       • Workspace untrusted → click 'Set up workspace' in the panel"
+info "  4. Adjust the binary path or workspace in Settings if needed."
 info ""
 info "To uninstall: bash $PLUGIN_DIR/uninstall.sh"
 echo ""

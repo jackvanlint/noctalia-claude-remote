@@ -10,6 +10,10 @@ Item {
 
     // ── Primary daemon state ──────────────────────────────────────────────
     property string rcStatus: "stopped"   // "connecting" | "connected" | "stopped"
+    property bool startupFailed: false    // true when daemon exits within the 6-second connect window
+    property string startupErrorType: ""  // "binary" | "workspace"
+    property bool claudeFound: true       // false if preflight cannot locate the claude binary
+    property bool preflightDone: false    // true once the preflight check has completed
     property int activeSessions: 0
     property int maxSessions: 32
 
@@ -182,11 +186,17 @@ Item {
         stdout: StdioCollector { onTextChanged: root.parseOutput(text) }
 
         onExited: (exitCode, exitStatus) => {
+            var wasConnecting = connectionTimer.running;
             root.rcStatus       = "stopped";
             root.activeSessions = 0;
             connectionTimer.stop();
             sessionPoller.running = false;
             Logger.i("ClaudeRemote", "Primary daemon exited — code " + exitCode);
+            if (wasConnecting) {
+                root.startupFailed = true;
+                root.startupErrorType = root.claudeFound ? "workspace" : "binary";
+                Logger.i("ClaudeRemote", "Quick exit — type: " + root.startupErrorType);
+            }
             if (root._pendingRestart) {
                 root._pendingRestart = false;
                 rcProcess.running = true;
@@ -328,13 +338,79 @@ Item {
     // ── Controls ──────────────────────────────────────────────────────────
     property bool _pendingRestart: false
 
-    function start()   { if (!rcProcess.running) rcProcess.running = true; }
+    function start() {
+        if (!rcProcess.running) {
+            root.startupFailed = false;
+            root.startupErrorType = "";
+            rcProcess.running = true;
+        }
+    }
     function stop()    { connectionTimer.stop(); sessionPoller.running = false; rcProcess.running = false; }
     function restart() { _pendingRestart = true; stop(); }
 
+    // Opens a terminal in the configured workspace dir running claude, so the
+    // user can accept the trust prompt and set up the workspace interactively.
+    readonly property var _setupCmd: {
+        var dir = workspaceDir.length > 0 ? workspaceDir : "~"
+        // Expand ~ safely via positional args — $1 = dir, $2 = claudeBin
+        var snippet =
+            'case "$1" in "~") set -- "$HOME" "$2";; ' +
+            '"~/"*) set -- "$HOME/${1#"~/"}" "$2";; esac; ' +
+            'cd "$1" && exec "$2"'
+        var slash = terminalBin.lastIndexOf("/")
+        var base = slash >= 0 ? terminalBin.substring(slash + 1) : terminalBin
+        if (base === "alacritty" || base === "ghostty" || base === "konsole" || base === "xterm")
+            return [terminalBin, "-e", "sh", "-c", snippet, "_", dir, claudeBin]
+        if (base === "wezterm")
+            return [terminalBin, "start", "--", "sh", "-c", snippet, "_", dir, claudeBin]
+        return [terminalBin, "--", "sh", "-c", snippet, "_", dir, claudeBin]
+    }
+
+    function setupWorkspace() { setupProc.running = true }
+
+    Process {
+        id: setupProc
+        running: false
+        command: root._setupCmd
+    }
+
+    // ── Claude binary preflight ───────────────────────────────────────────
+    Process {
+        id: preflightProc
+        running: false
+        // Pass claudeBin as $1 to avoid interpolation issues with non-standard paths
+        command: ["sh", "-c",
+            'command -v "$1" >/dev/null 2>&1 && echo found || echo missing',
+            "_", root.claudeBin]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                root.claudeFound  = text.trim() === "found"
+                root.preflightDone = true
+                Logger.i("ClaudeRemote", "Preflight: " + root.claudeBin
+                    + (root.claudeFound ? " found" : " not found"))
+            }
+        }
+    }
+
+    // Re-check if the user changes the binary path in Settings
+    onClaudeBinChanged: {
+        root.claudeFound   = true
+        root.preflightDone = false
+        preflightProc.running = true
+    }
+
+    Process {
+        id: openBrowserProc
+        running: false
+        command: ["xdg-open", "https://claude.ai/code"]
+    }
+
+    function openInstallPage() { openBrowserProc.running = true }
+
     Component.onCompleted: {
         Logger.i("ClaudeRemote", "Main loaded — auto-start disabled, use button to start session");
-        skillLister.running = true;
-        usageProc.running  = true;
+        preflightProc.running = true;
+        skillLister.running   = true;
+        usageProc.running     = true;
     }
 }

@@ -49,6 +49,14 @@ Item {
     readonly property var    named:      main?.namedSessions ?? []
     readonly property int    namedCount: named.length
 
+    // ── Derived state helpers ─────────────────────────────────────────────
+    readonly property bool isStopped:     rcStatus === "stopped"
+    readonly property bool didFail:       main?.startupFailed ?? false
+    readonly property bool binaryMissing: isStopped &&  didFail && (main?.startupErrorType ?? "") === "binary"
+    readonly property bool trustNeeded:   isStopped &&  didFail && (main?.startupErrorType ?? "") === "workspace"
+    readonly property bool claudeAbsent:  isStopped && !didFail && (main?.preflightDone ?? false) && !(main?.claudeFound ?? true)
+    readonly property bool readyToStart:  isStopped && !didFail && (!(main?.preflightDone ?? false) || (main?.claudeFound ?? true))
+
     Rectangle {
         id: panelContainer
         anchors.fill: parent
@@ -265,12 +273,103 @@ Item {
                 }
             }
 
-            NText {
-                visible: rcStatus !== "connected" && namedCount === 0
-                text: rcStatus === "connecting" ? "Establishing connection…" : "Daemon is not running"
-                pointSize: Style.fontSizeM
-                color: Color.mOnSurfaceVariant
+            ColumnLayout {
                 Layout.fillWidth: true
+                spacing: Style.marginS
+                visible: rcStatus !== "connected" && namedCount === 0
+
+                // ── Connecting ────────────────────────────────────────────
+                NText {
+                    visible: rcStatus === "connecting"
+                    text: "Establishing connection…"
+                    pointSize: Style.fontSizeM
+                    color: Color.mOnSurfaceVariant
+                    Layout.fillWidth: true
+                }
+
+                // ── Status heading ────────────────────────────────────────
+                NText {
+                    visible: isStopped && didFail
+                    text: "Daemon failed to start"
+                    pointSize: Style.fontSizeM
+                    color: Color.mError
+                    Layout.fillWidth: true
+                }
+
+                NText {
+                    visible: claudeAbsent
+                    text: "Claude Code not found"
+                    pointSize: Style.fontSizeM
+                    color: Color.mError
+                    Layout.fillWidth: true
+                }
+
+                NText {
+                    visible: readyToStart
+                    text: "Daemon is not running"
+                    pointSize: Style.fontSizeM
+                    color: Color.mOnSurfaceVariant
+                    Layout.fillWidth: true
+                }
+
+                // ── Ready to start: workspace hint ────────────────────────
+                NText {
+                    visible: readyToStart
+                    text: "Workspace: " + (main?.workspaceDir || "~") + "  ·  change in Settings if needed"
+                    pointSize: Style.fontSizeS
+                    color: Color.mOnSurfaceVariant
+                    opacity: 0.6
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                }
+
+                // ── Claude not installed (preflight or binary error) ───────
+                NText {
+                    visible: claudeAbsent || binaryMissing
+                    text: binaryMissing
+                        ? "Binary not found at \"" + (main?.claudeBin || "claude") + "\". " +
+                          "If Claude Code is already installed, enter the correct path in Settings. " +
+                          "Otherwise, install it first."
+                        : "1. Download and install Claude Code from claude.ai/code\n" +
+                          "2. Open a terminal and run: claude\n" +
+                          "3. Sign in with your Anthropic account\n" +
+                          "4. Accept any workspace trust prompts\n" +
+                          "5. Come back here and click Start"
+                    pointSize: Style.fontSizeS
+                    color: Color.mOnSurfaceVariant
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                }
+
+                NButton {
+                    visible: claudeAbsent || binaryMissing
+                    Layout.fillWidth: true
+                    text: "Get Claude Code"
+                    icon: "external-link"
+                    outlined: true
+                    onClicked: main?.openInstallPage()
+                }
+
+                // ── Workspace not trusted (startup failed, binary was found) ─
+                NText {
+                    visible: trustNeeded
+                    text: "Your workspace may not be trusted by Claude.\n" +
+                          "Click below to open a terminal there and run claude — " +
+                          "accept the trust prompt, then click Start."
+                    pointSize: Style.fontSizeS
+                    color: Color.mOnSurfaceVariant
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                }
+
+                NButton {
+                    visible: trustNeeded
+                    Layout.fillWidth: true
+                    text: "Set up workspace"
+                    icon: "terminal"
+                    outlined: true
+                    onClicked: main?.setupWorkspace()
+                }
             }
 
             // ── Named sessions list ───────────────────────────────────────
