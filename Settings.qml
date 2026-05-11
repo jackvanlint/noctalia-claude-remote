@@ -10,20 +10,23 @@ ColumnLayout {
 
     function saveSettings() {
         if (!pluginApi) return;
-        pluginApi.pluginSettings.sessionName = nameInput.text.trim()    || "Remote Session";
-        pluginApi.pluginSettings.claudeBin   = binInput.text.trim()     || "claude";
-        pluginApi.pluginSettings.terminalBin = terminalInput.text.trim() || "kitty";
+        pluginApi.pluginSettings.sessionName  = nameInput.text.trim()     || "Remote Session";
+        pluginApi.pluginSettings.claudeBin    = binInput.text.trim()      || "claude";
+        pluginApi.pluginSettings.terminalBin  = terminalInput.text.trim() || "kitty";
+        pluginApi.pluginSettings.workspaceDir = workspaceInput.text.trim();
         pluginApi.saveSettings();
         Logger.i("ClaudeRemote", "Settings saved — claudeBin: " + pluginApi.pluginSettings.claudeBin
-            + " terminalBin: " + pluginApi.pluginSettings.terminalBin);
+            + " terminalBin: " + pluginApi.pluginSettings.terminalBin
+            + " workspaceDir: " + pluginApi.pluginSettings.workspaceDir);
     }
 
     spacing: Style.marginM
 
     Component.onCompleted: {
-        nameInput.text    = pluginApi?.pluginSettings?.sessionName  || "Remote Session";
-        binInput.text     = pluginApi?.pluginSettings?.claudeBin    || "claude";
-        terminalInput.text = pluginApi?.pluginSettings?.terminalBin || "kitty";
+        nameInput.text      = pluginApi?.pluginSettings?.sessionName   || "Remote Session";
+        binInput.text       = pluginApi?.pluginSettings?.claudeBin     || "claude";
+        terminalInput.text  = pluginApi?.pluginSettings?.terminalBin   || "kitty";
+        workspaceInput.text = pluginApi?.pluginSettings?.workspaceDir  || "";
     }
 
     NHeader {
@@ -52,7 +55,7 @@ ColumnLayout {
 
     NHeader {
         label: "Terminal Emulator"
-        description: "The terminal used to run skills. Common values: kitty, foot, ghostty, wezterm, gnome-terminal, alacritty."
+        description: "The terminal used to run skills. Common values: kitty, foot, ghostty, wezterm, gnome-terminal, alacritty, konsole, xterm."
     }
 
     NTextInput {
@@ -62,4 +65,15 @@ ColumnLayout {
         onEditingFinished: root.saveSettings()
     }
 
+    NHeader {
+        label: "Workspace Directory"
+        description: "Directory the daemon cd's into before launching. Required by 'claude remote-control' — must be a trusted workspace (run 'claude' there once and accept the trust dialog). Leave blank to inherit Noctalia's cwd."
+    }
+
+    NTextInput {
+        id: workspaceInput
+        Layout.fillWidth: true
+        placeholderText: "~/projects/remote-scratchpad"
+        onEditingFinished: root.saveSettings()
+    }
 }

@@ -2,6 +2,11 @@
 """
 Stop hook: auto-title new remote sessions from their first user message.
 Only runs when CLAUDE_REMOTE_SESSION=1 is set in the environment.
+
+Auth resolution order:
+  1. OAuth access token from ~/.claude/.credentials.json (the same login
+     Claude Code itself uses — counts against your subscription quota)
+  2. ANTHROPIC_API_KEY env var (billed separately as API usage)
 """
 import json
 import os
@@ -20,6 +25,44 @@ def extract_text(content) -> str:
                 parts.append(block.get("text", ""))
         return " ".join(parts).strip()
     return ""
+
+
+def get_auth():
+    """Returns (auth_type, value): ('oauth', token) | ('api_key', key) | (None, None)."""
+    creds_path = pathlib.Path.home() / ".claude" / ".credentials.json"
+    if creds_path.exists():
+        try:
+            with open(creds_path) as f:
+                creds = json.load(f)
+            for key in ("claudeAiOauth", "oauth", ""):
+                obj = creds.get(key, creds) if key else creds
+                if isinstance(obj, dict):
+                    token = obj.get("access_token") or obj.get("accessToken")
+                    if token:
+                        return ("oauth", token)
+        except Exception:
+            pass
+
+    api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+    if api_key:
+        return ("api_key", api_key)
+
+    return (None, None)
+
+
+def build_headers(auth_type, auth_value):
+    if auth_type == "oauth":
+        return {
+            "Authorization": "Bearer " + auth_value,
+            "anthropic-version": "2023-06-01",
+            "anthropic-beta": "oauth-2025-04-20",
+            "content-type": "application/json",
+        }
+    return {
+        "x-api-key": auth_value,
+        "anthropic-version": "2023-06-01",
+        "content-type": "application/json",
+    }
 
 
 def main():
@@ -82,8 +125,8 @@ def main():
 
     first_msg = human_texts[0][:500]
 
-    api_key = os.environ.get("ANTHROPIC_API_KEY", "")
-    if not api_key:
+    auth_type, auth_value = get_auth()
+    if not auth_type:
         sys.exit(0)
 
     payload = json.dumps({
@@ -101,11 +144,7 @@ def main():
     req = urllib.request.Request(
         "https://api.anthropic.com/v1/messages",
         data=payload,
-        headers={
-            "x-api-key": api_key,
-            "anthropic-version": "2023-06-01",
-            "content-type": "application/json",
-        },
+        headers=build_headers(auth_type, auth_value),
     )
 
     try:

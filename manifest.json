@@ -20,6 +20,7 @@
       "sessionName": "Remote Session",
       "claudeBin": "claude",
       "terminalBin": "kitty",
+      "workspaceDir": "",
       "favouriteSkills": []
     }
   }

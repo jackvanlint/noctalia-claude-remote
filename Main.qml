@@ -98,6 +98,8 @@ Item {
         pluginApi?.pluginSettings?.claudeBin || "claude"
     readonly property string terminalBin:
         pluginApi?.pluginSettings?.terminalBin || "kitty"
+    readonly property string workspaceDir:
+        pluginApi?.pluginSettings?.workspaceDir || ""
     readonly property string scriptPath:
         Qt.resolvedUrl("start-session.sh").toString().replace("file://", "")
 
@@ -149,12 +151,26 @@ Item {
     }
 
     // ── Primary daemon process ────────────────────────────────────────────
+    // If workspaceDir is set, run inside a tiny sh wrapper that cd's first
+    // (handles ~ expansion safely; positional args avoid quote-injection).
+    readonly property var _primaryCmd: {
+        if (!workspaceDir || workspaceDir.length === 0) {
+            return [claudeBin, "remote-control",
+                    "--name", configuredName,
+                    "--spawn", "session"]
+        }
+        var script =
+            'case "$1" in "~") set -- "$HOME" "$2" "$3";; ' +
+            '"~/"*) set -- "$HOME/${1#"~/"}" "$2" "$3";; esac; ' +
+            'cd "$1" || exit 1; ' +
+            'exec "$2" remote-control --name "$3" --spawn session'
+        return ["sh", "-c", script, "_", workspaceDir, claudeBin, configuredName]
+    }
+
     Process {
         id: rcProcess
         running: false
-        command: [root.claudeBin, "remote-control",
-                  "--name", root.configuredName,
-                  "--spawn", "session"]
+        command: root._primaryCmd
 
         onRunningChanged: {
             if (running) {
@@ -191,7 +207,7 @@ Item {
         id: spawnProc
         property string pendingName: ""
         running: false
-        command: [root.scriptPath, pendingName, root.claudeBin]
+        command: [root.scriptPath, pendingName, root.claudeBin, root.workspaceDir]
         stdout: StdioCollector {
             onStreamFinished: {
                 var pid = parseInt(text.trim());
@@ -285,14 +301,28 @@ Item {
         skillRunner.running = true
     }
 
+    // Returns the right argv for launching `cmd arg` inside a terminal emulator.
+    // Different terminals use different flags for "run this command":
+    //   -e:        alacritty, ghostty, konsole, xterm
+    //   start --:  wezterm
+    //   --:        kitty, foot, gnome-terminal (and unknown fallback)
+    function buildTermCmd(terminal, cmd, arg) {
+        var slash = terminal.lastIndexOf("/")
+        var base = slash >= 0 ? terminal.substring(slash + 1) : terminal
+        if (base === "alacritty" || base === "ghostty" || base === "konsole" || base === "xterm") {
+            return [terminal, "-e", cmd, arg]
+        }
+        if (base === "wezterm") {
+            return [terminal, "start", "--", cmd, arg]
+        }
+        return [terminal, "--", cmd, arg]
+    }
+
     Process {
         id: skillRunner
         property string skillName: ""
         running: false
-        // alacritty uses "-e"; all other common terminals accept "--"
-        command: root.terminalBin === "alacritty"
-            ? [root.terminalBin, "-e", root.claudeBin, "/" + skillName]
-            : [root.terminalBin, "--", root.claudeBin, "/" + skillName]
+        command: root.buildTermCmd(root.terminalBin, root.claudeBin, "/" + skillName)
     }
 
     // ── Controls ──────────────────────────────────────────────────────────
