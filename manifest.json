@@ -1,7 +1,7 @@
 {
   "id": "claude-remote",
   "name": "Claude Remote",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "minNoctaliaVersion": "3.6.0",
   "author": "Jack Vanlint <277274540+jackvanlint@users.noreply.github.com>",
   "description": "Runs claude remote-control in the background and shows live status in the bar",
@@ -19,6 +19,7 @@
     "defaultSettings": {
       "sessionName": "Remote Session",
       "claudeBin": "claude",
+      "terminalBin": "kitty",
       "favouriteSkills": []
     }
   }

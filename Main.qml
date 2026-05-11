@@ -16,6 +16,50 @@ Item {
     // ── Named extra sessions: [{name, pid}] ───────────────────────────────
     property var namedSessions: []
 
+    // ── Usage stats ───────────────────────────────────────────────────────
+    property real pct5h:       -1.0  // 0–1 from API, -1 = unknown
+    property real pct7d:       -1.0
+    property int  reset5hMins: 0
+    property int  reset7dMins: 0
+    property int  tokensToday: 0
+    property int  prompts5h:   0
+    property int  prompts7d:   0
+    property bool apiOk:       false
+    property var  usageDays:   []    // [{date, tokens, prompts}] oldest→newest
+
+    readonly property string usagePath:
+        Qt.resolvedUrl("usage.py").toString().replace("file://", "")
+
+    Timer {
+        id: usagePoller
+        interval: 300000   // every 5 min — matches the API's cache window
+        repeat: true
+        running: true
+        onTriggered: usageProc.running = true
+    }
+
+    Process {
+        id: usageProc
+        running: false
+        command: ["python3", root.usagePath]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                try {
+                    var d = JSON.parse(text.trim())
+                    root.pct5h       = d.pct_5h       ?? -1
+                    root.pct7d       = d.pct_7d       ?? -1
+                    root.reset5hMins = d.reset_5h_mins ?? 0
+                    root.reset7dMins = d.reset_7d_mins ?? 0
+                    root.tokensToday = d.tokens_today  ?? 0
+                    root.prompts5h   = d.prompts_5h    ?? 0
+                    root.prompts7d   = d.prompts_7d    ?? 0
+                    root.apiOk       = d.api_ok        ?? false
+                    root.usageDays   = d.days          ?? []
+                } catch(e) {}
+            }
+        }
+    }
+
     // ── Skills: [{name, description}] ────────────────────────────────────
     property var skills: []
     property var favourites: []
@@ -52,6 +96,8 @@ Item {
         pluginApi?.pluginSettings?.sessionName || "Remote Session"
     readonly property string claudeBin:
         pluginApi?.pluginSettings?.claudeBin || "claude"
+    readonly property string terminalBin:
+        pluginApi?.pluginSettings?.terminalBin || "kitty"
     readonly property string scriptPath:
         Qt.resolvedUrl("start-session.sh").toString().replace("file://", "")
 
@@ -61,19 +107,9 @@ Item {
         interval: 6000
         onTriggered: {
             if (rcProcess.running) {
-                rcStatus = "connected";
+                root.rcStatus = "connected";
                 sessionPoller.running = true;
                 Logger.i("ClaudeRemote", "Primary daemon connected");
-            }
-        }
-    }
-
-    Connections {
-        target: rcProcess
-        function onRunningChanged() {
-            if (rcProcess.running) {
-                rcStatus = "connecting";
-                connectionTimer.restart();
             }
         }
     }
@@ -119,6 +155,13 @@ Item {
         command: [root.claudeBin, "remote-control",
                   "--name", root.configuredName,
                   "--spawn", "session"]
+
+        onRunningChanged: {
+            if (running) {
+                root.rcStatus = "connecting";
+                connectionTimer.restart();
+            }
+        }
 
         stdout: StdioCollector { onTextChanged: root.parseOutput(text) }
 
@@ -246,7 +289,10 @@ Item {
         id: skillRunner
         property string skillName: ""
         running: false
-        command: ["kitty", "--", root.claudeBin, "/" + skillName]
+        // alacritty uses "-e"; all other common terminals accept "--"
+        command: root.terminalBin === "alacritty"
+            ? [root.terminalBin, "-e", root.claudeBin, "/" + skillName]
+            : [root.terminalBin, "--", root.claudeBin, "/" + skillName]
     }
 
     // ── Controls ──────────────────────────────────────────────────────────
@@ -257,8 +303,8 @@ Item {
     function restart() { _pendingRestart = true; stop(); }
 
     Component.onCompleted: {
-        Logger.i("ClaudeRemote", "Main loaded — starting '" + root.configuredName + "'");
-        rcProcess.running = true;
+        Logger.i("ClaudeRemote", "Main loaded — auto-start disabled, use button to start session");
         skillLister.running = true;
+        usageProc.running  = true;
     }
 }

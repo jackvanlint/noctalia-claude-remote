@@ -23,9 +23,23 @@ A [Noctalia](https://github.com/noctalia-dev/noctalia) bar plugin that runs `cla
 | `Main.qml` | Core logic — daemon, session management, skill discovery, favourites |
 | `BarWidget.qml` | Status bar widget |
 | `Panel.qml` | Drop-down panel |
-| `Settings.qml` | Settings UI — session name and claude binary path |
+| `Settings.qml` | Settings UI — session name, claude binary, and terminal emulator |
 | `start-session.sh` | Spawns a detached daemon and returns its PID |
 | `auto-title.py` | Claude Stop hook — titles new sessions via Haiku API |
+| `usage.py` | Fetches rate-limit usage from the Anthropic OAuth API |
+| `install.sh` | One-step installer — copies files, detects terminal, creates settings |
+
+---
+
+## Installation
+
+```bash
+git clone https://github.com/jackvanlint/noctalia-claude-remote.git
+cd noctalia-claude-remote
+bash install.sh
+```
+
+The script auto-detects your terminal emulator, creates a default `settings.json`, and makes the helper scripts executable. Reload Noctalia afterwards.
 
 ---
 
@@ -35,6 +49,7 @@ A [Noctalia](https://github.com/noctalia-dev/noctalia) bar plugin that runs `cla
 |---------|---------|-------------|
 | `sessionName` | `"Remote Session"` | Name shown in claude.ai/code and the mobile app |
 | `claudeBin` | `"claude"` | Path to the claude CLI binary |
+| `terminalBin` | `"kitty"` | Terminal emulator used to run skills (kitty, foot, ghostty, wezterm, alacritty, gnome-terminal, …) |
 | `favouriteSkills` | `[]` | Skills pinned to the top of the browser |
 
 ---
@@ -43,8 +58,8 @@ A [Noctalia](https://github.com/noctalia-dev/noctalia) bar plugin that runs `cla
 
 - [Noctalia](https://github.com/noctalia-dev/noctalia) ≥ 3.6.0
 - [Claude Code CLI](https://claude.ai/code)
-- Python 3 (for `auto-title.py`)
-- `kitty` terminal (for Run button — or change `skillRunner` command in `Main.qml`)
+- Python 3 (for `auto-title.py` and `usage.py`)
+- A terminal emulator (configurable in Settings — defaults to `kitty`)
 
 ---
 

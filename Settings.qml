@@ -10,17 +10,20 @@ ColumnLayout {
 
     function saveSettings() {
         if (!pluginApi) return;
-        pluginApi.pluginSettings.sessionName = nameInput.text.trim() || "Remote Session";
-        pluginApi.pluginSettings.claudeBin   = binInput.text.trim()  || "claude";
+        pluginApi.pluginSettings.sessionName = nameInput.text.trim()    || "Remote Session";
+        pluginApi.pluginSettings.claudeBin   = binInput.text.trim()     || "claude";
+        pluginApi.pluginSettings.terminalBin = terminalInput.text.trim() || "kitty";
         pluginApi.saveSettings();
-        Logger.i("ClaudeRemote", "Settings saved — claudeBin: " + pluginApi.pluginSettings.claudeBin);
+        Logger.i("ClaudeRemote", "Settings saved — claudeBin: " + pluginApi.pluginSettings.claudeBin
+            + " terminalBin: " + pluginApi.pluginSettings.terminalBin);
     }
 
     spacing: Style.marginM
 
     Component.onCompleted: {
-        nameInput.text = pluginApi?.pluginSettings?.sessionName || "Remote Session";
-        binInput.text  = pluginApi?.pluginSettings?.claudeBin   || "claude";
+        nameInput.text    = pluginApi?.pluginSettings?.sessionName  || "Remote Session";
+        binInput.text     = pluginApi?.pluginSettings?.claudeBin    || "claude";
+        terminalInput.text = pluginApi?.pluginSettings?.terminalBin || "kitty";
     }
 
     NHeader {
@@ -46,4 +49,17 @@ ColumnLayout {
         placeholderText: "claude"
         onEditingFinished: root.saveSettings()
     }
+
+    NHeader {
+        label: "Terminal Emulator"
+        description: "The terminal used to run skills. Common values: kitty, foot, ghostty, wezterm, gnome-terminal, alacritty."
+    }
+
+    NTextInput {
+        id: terminalInput
+        Layout.fillWidth: true
+        placeholderText: "kitty"
+        onEditingFinished: root.saveSettings()
+    }
+
 }

@@ -39,8 +39,10 @@ Item {
     signal wheel(int angleDelta)
 
     // ── Data from Main.qml ────────────────────────────────────────────────
-    readonly property var    main:     pluginApi?.mainInstance
-    readonly property string rcStatus: main?.rcStatus ?? "stopped"
+    readonly property var    main:       pluginApi?.mainInstance
+    readonly property string rcStatus:   main?.rcStatus ?? "stopped"
+    readonly property int    namedCount: main?.namedSessions?.length ?? 0
+    readonly property bool   anyActive:  rcStatus === "connected" || namedCount > 0
 
     readonly property real contentWidth:  applyUiScale ? Math.round(baseSize * Style.uiScaleRatio) : Math.round(baseSize)
     readonly property real contentHeight: applyUiScale ? Math.round(baseSize * Style.uiScaleRatio) : Math.round(baseSize)
@@ -80,7 +82,7 @@ Item {
         NIcon {
             anchors.centerIn: parent
             icon:  "brain"
-            color: rcStatus === "connected"
+            color: anyActive
                    ? (hovering ? colorFgHover : colorFg)
                    : Color.mOnSurfaceVariant
         }
@@ -99,11 +101,9 @@ Item {
             border.color: capsule.color
 
             color: {
-                switch (rcStatus) {
-                    case "connected":  return "#4caf50"
-                    case "connecting": return "#ff9800"
-                    default:           return "#f44336"
-                }
+                if (rcStatus === "connected" || namedCount > 0) return "#4caf50"
+                if (rcStatus === "connecting") return "#ff9800"
+                return "#f44336"
             }
 
             // Pulse while connecting
