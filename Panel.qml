@@ -11,19 +11,18 @@ Item {
     property var pluginApi: null
     readonly property var  geometryPlaceholder:   panelContainer
     readonly property bool allowAttach:            true
-    property bool showSkills: false
+    property string panelPage: "main"   // "main" | "usage" | "skills"
     property string expandedSkill: ""
-    property string panelPage: "main"
     readonly property int skillsCount: main?.skills?.length ?? 0
 
+    // Fixed-height panel — main page stays one size so adding sessions doesn't
+    // shove the footer buttons around. Sub-pages get their own sizes.
     property real contentPreferredWidth: 380 * Style.uiScaleRatio
-    property real contentPreferredHeight: panelPage === "usage"
-        ? 320 * Style.uiScaleRatio
-        : Math.max(220,
-            400 +
-            (namedCount > 0 ? Math.min(namedCount, 3) * 38 + 52 : 0) +
-            (quickLaunchVisible ? 70 : 0) +
-            (showSkills ? skillsCount * 54 + 44 + (expandedSkill !== "" ? 110 : 0) : 0)) * Style.uiScaleRatio
+    property real contentPreferredHeight: (
+        panelPage === "skills" ? 520 :
+        panelPage === "usage"  ? 320 :
+                                 640
+    ) * Style.uiScaleRatio
 
     Behavior on contentPreferredHeight {
         NumberAnimation { duration: 220; easing.type: Easing.OutCubic }
@@ -49,8 +48,8 @@ Item {
         return Color.mPrimary
     }
 
-    // ── Plan badge — handles both bare ("pro", "max_5x") and prefixed
-    //    ("claude_pro") subscription strings returned by the API.
+    // Plan badge — handles both bare ("pro", "max_5x") and prefixed
+    // ("claude_pro") subscription strings returned by the API.
     function planNorm(t) {
         if (!t) return ""
         return t.toLowerCase().replace(/^claude_/, "")
@@ -65,57 +64,29 @@ Item {
         if (s === "free")    return "FREE"
         return s.replace(/_/g, " ").toUpperCase()
     }
-    function planTier(t) {
-        var s = planNorm(t)
-        if (!s) return ""
-        if (s.indexOf("max") >= 0) return "max"
-        if (s === "pro") return "pro"
-        if (s === "free") return "free"
-        return "other"
-    }
-    function planBg(t) {
-        var tier = planTier(t)
-        if (tier === "max")  return "#3a2e00"
-        if (tier === "pro")  return "#1a3a5f"
-        if (tier === "free") return "#2a2a2a"
-        if (tier === "other") return Color.mSurfaceVariant
-        return "transparent"
-    }
-    function planFg(t) {
-        var tier = planTier(t)
-        if (tier === "max")  return "#ffb74d"
-        if (tier === "pro")  return "#64b5f6"
-        if (tier === "free") return "#9e9e9e"
-        return Color.mOnSurfaceVariant
-    }
 
     readonly property var    main:       pluginApi?.mainInstance
     readonly property string rcStatus:   main?.rcStatus ?? "stopped"
     readonly property var    named:      main?.namedSessions ?? []
     readonly property int    namedCount: named.length
+    readonly property var    favSet: {
+        var s = new Set()
+        var favs = main?.favourites ?? []
+        for (var i = 0; i < favs.length; i++) s.add(favs[i])
+        return s
+    }
 
-    // ── Quick-launch: favourites if any, else suggest top skills.
-    // The space below the sessions list otherwise sits empty, so we always
-    // fill it with something tappable to make the panel feel intentional.
+    // Suggested Skills — favourites first (pinned, shown with ★), then the
+    // rest of the catalogue alphabetical; capped at quickLaunchMax.
     readonly property int  quickLaunchMax: 6
-    readonly property bool quickLaunchUsesFavs: (main?.favourites?.length ?? 0) > 0
     readonly property var  quickLaunchSkills: {
         var all = main?.skills ?? []
         if (all.length === 0) return []
-        if (quickLaunchUsesFavs) {
-            var favs = main?.favourites ?? []
-            var byName = {}
-            for (var i = 0; i < all.length; i++) byName[all[i].name] = all[i]
-            var out = []
-            for (var j = 0; j < favs.length && out.length < quickLaunchMax; j++) {
-                if (byName[favs[j]]) out.push(byName[favs[j]])
-            }
-            return out
-        }
-        // Fallback: first N skills, alphabetical (matches Repeater sort order)
-        return all.slice(0, quickLaunchMax)
+        var pinned  = all.filter(function(s) { return favSet.has(s.name) })
+        var rest    = all.filter(function(s) { return !favSet.has(s.name) })
+        return pinned.concat(rest).slice(0, quickLaunchMax)
     }
-    readonly property bool quickLaunchVisible: !showSkills && quickLaunchSkills.length > 0
+    readonly property bool quickLaunchVisible: quickLaunchSkills.length > 0
 
     // ── Derived state helpers ─────────────────────────────────────────────
     readonly property bool isStopped:     rcStatus === "stopped"
@@ -142,20 +113,26 @@ Item {
                 Layout.fillWidth: true
                 spacing: Style.marginS
 
-                // Plan badge — solid tinted pill, hidden when plan unknown
+                // Plan badge — dark-primary pill, mirroring the connected badge
+                // pattern (dark muted bg + lighter text in the same colour
+                // family) but using mPrimary instead of green.
                 Rectangle {
                     visible: planText.text !== ""
                     Layout.preferredWidth:  planText.implicitWidth + Style.marginM * 2
                     Layout.preferredHeight: planText.implicitHeight + Style.marginXS * 2 + 2
                     radius: Style.radiusS
-                    color:  planBg(main?.planType ?? "")
+                    color: Qt.rgba(Color.mPrimary.r * 0.22,
+                                   Color.mPrimary.g * 0.22,
+                                   Color.mPrimary.b * 0.22, 1.0)
 
                     NText {
                         id: planText
                         anchors.centerIn: parent
                         text: planDisplay(main?.planType ?? "")
                         pointSize: Style.fontSizeS
-                        color: planFg(main?.planType ?? "")
+                        color: Qt.rgba(Math.min(1, Color.mPrimary.r * 0.75 + 0.25),
+                                       Math.min(1, Color.mPrimary.g * 0.75 + 0.25),
+                                       Math.min(1, Color.mPrimary.b * 0.75 + 0.25), 1.0)
                         font.weight: Font.Bold
                         font.letterSpacing: 0.8
                     }
@@ -185,13 +162,13 @@ Item {
                 }
             }
 
-            NDivider { visible: (main?.showUsage ?? true) && !showSkills }
+            NDivider { visible: main?.showUsage ?? true }
 
             // ── Rate limit usage ──────────────────────────────────────────
             ColumnLayout {
                 Layout.fillWidth: true
                 spacing: Style.marginS
-                visible: (main?.showUsage ?? true) && !showSkills
+                visible: main?.showUsage ?? true
 
                 NText {
                     text: "Rate Limit Usage"
@@ -318,32 +295,35 @@ Item {
                     }
                 }
 
-                // Token counter chip
+                // Token counter chip — neutral
                 Rectangle {
                     Layout.fillWidth: true
                     height: tokenRow.implicitHeight + Style.marginS * 2
                     radius: Style.radiusS
-                    color:  Qt.rgba(Color.mPrimary.r, Color.mPrimary.g, Color.mPrimary.b, 0.07)
+                    color:  Color.mSurfaceVariant
 
                     RowLayout {
                         id: tokenRow
                         anchors { left: parent.left; right: parent.right; verticalCenter: parent.verticalCenter; margins: Style.marginS }
                         spacing: Style.marginS
 
-                        NIcon { icon: "cpu"; pointSize: Style.fontSizeM; color: Color.mPrimary; opacity: 0.6 }
+                        NIcon {
+                            icon: "cpu"
+                            pointSize: Style.fontSizeM
+                            color: Color.mOnSurfaceVariant
+                        }
 
                         NText {
                             text: fmtTokens(main?.tokensToday ?? 0) + " tokens today"
                             pointSize: Style.fontSizeS
-                            color: Color.mPrimary
-                            opacity: 0.65
+                            color: Color.mOnSurfaceVariant
                             Layout.fillWidth: true
                         }
                     }
                 }
             }
 
-            NDivider { visible: (main?.showUsage ?? true) && !showSkills }
+            NDivider { visible: main?.showUsage ?? true }
 
             // ── Max sessions warning ──────────────────────────────────────
             RowLayout {
@@ -554,7 +534,10 @@ Item {
                 }
             }
 
-            // ── Quick Launch — chips that fill the previously-empty space ───
+            // ── Suggested Skills (always shown when skills exist) ─────────
+            // Pinned skills (favourites) come first and carry a small ★
+            // marker; the rest fill remaining slots alphabetically. Tap a
+            // chip to launch the skill in a terminal.
             ColumnLayout {
                 Layout.fillWidth: true
                 spacing: Style.marginS
@@ -562,32 +545,11 @@ Item {
 
                 NDivider {}
 
-                RowLayout {
-                    Layout.fillWidth: true
-                    spacing: Style.marginXS
-
-                    NIcon {
-                        icon: quickLaunchUsesFavs ? "star-filled" : "sparkles"
-                        pointSize: Style.fontSizeS
-                        color: quickLaunchUsesFavs ? "#FFD700" : Color.mPrimary
-                        opacity: 0.85
-                    }
-
-                    NText {
-                        text: quickLaunchUsesFavs ? "Quick Launch" : "Suggested Skills"
-                        pointSize: Style.fontSizeS
-                        color: Color.mOnSurfaceVariant
-                        font.weight: Style.fontWeightSemiBold
-                        Layout.fillWidth: true
-                    }
-
-                    NText {
-                        visible: !quickLaunchUsesFavs
-                        text: "★ in Skills to pin"
-                        pointSize: Style.fontSizeS
-                        color: Color.mOnSurfaceVariant
-                        opacity: 0.5
-                    }
+                NText {
+                    text: "Suggested Skills"
+                    pointSize: Style.fontSizeS
+                    color: Color.mOnSurfaceVariant
+                    font.weight: Style.fontWeightSemiBold
                 }
 
                 Flow {
@@ -598,14 +560,14 @@ Item {
                         model: quickLaunchSkills
                         delegate: Rectangle {
                             id: chip
+                            readonly property bool isPinned: favSet.has(modelData.name)
+
                             width: chipRow.implicitWidth + Style.marginM * 2
                             height: chipRow.implicitHeight + Style.marginXS * 2 + 4
                             radius: height / 2
                             color: chipHover.containsMouse
-                                ? Qt.rgba(Color.mPrimary.r, Color.mPrimary.g, Color.mPrimary.b, 0.22)
-                                : Qt.rgba(Color.mPrimary.r, Color.mPrimary.g, Color.mPrimary.b, 0.12)
-                            border.width: 1
-                            border.color: Qt.rgba(Color.mPrimary.r, Color.mPrimary.g, Color.mPrimary.b, 0.28)
+                                ? Qt.lighter(Color.mSurfaceVariant, 1.18)
+                                : Color.mSurfaceVariant
                             Behavior on color { ColorAnimation { duration: 120 } }
 
                             RowLayout {
@@ -614,15 +576,16 @@ Item {
                                 spacing: 5
 
                                 NIcon {
-                                    icon: "player-play"
-                                    pointSize: Style.fontSizeS
-                                    color: Color.mPrimary
+                                    visible: chip.isPinned
+                                    icon: "star-filled"
+                                    pointSize: Style.fontSizeS - 1
+                                    color: Color.mOnSurfaceVariant
                                 }
 
                                 NText {
                                     text: modelData.name
                                     pointSize: Style.fontSizeS
-                                    color: Color.mPrimary
+                                    color: Color.mOnSurface
                                     font.weight: Style.fontWeightSemiBold
                                 }
                             }
@@ -639,6 +602,8 @@ Item {
                 }
             }
 
+            // Absorbs slack so the New Session + footer buttons stay pinned
+            // to the bottom even when sessions count or content changes.
             Item { Layout.fillHeight: true }
 
             // ── New named session ─────────────────────────────────────────
@@ -655,114 +620,6 @@ Item {
                 }
             }
 
-            // ── Skills ───────────────────────────────────────────────────
-            ColumnLayout {
-                Layout.fillWidth: true
-                spacing: Style.marginXS
-                visible: showSkills
-
-                NDivider {}
-
-                NText {
-                    text: "Skills"
-                    pointSize: Style.fontSizeS
-                    color: Color.mOnSurfaceVariant
-                    font.weight: Style.fontWeightSemiBold
-                }
-
-                Repeater {
-                    model: main?.sortedSkills ?? []
-                    delegate: ColumnLayout {
-                        Layout.fillWidth: true
-                        spacing: Style.marginXS
-
-                        readonly property bool isFavourite: (main?.favourites ?? []).indexOf(modelData.name) >= 0
-                        readonly property bool isExpanded: expandedSkill === modelData.name
-
-                        RowLayout {
-                            Layout.fillWidth: true
-                            spacing: Style.marginS
-
-                            NIcon {
-                                icon: "sparkles"
-                                pointSize: Style.fontSizeM
-                                color: isFavourite ? Color.mPrimary : Color.mOnSurfaceVariant
-                            }
-
-                            Item {
-                                Layout.fillWidth: true
-                                Layout.preferredHeight: textCol.implicitHeight
-
-                                ColumnLayout {
-                                    id: textCol
-                                    anchors { left: parent.left; right: parent.right }
-                                    spacing: 1
-
-                                    NText {
-                                        text: modelData.name
-                                        pointSize: Style.fontSizeM
-                                        color: isExpanded ? Color.mPrimary : Color.mOnSurface
-                                        elide: Text.ElideRight
-                                        Layout.fillWidth: true
-                                    }
-
-                                    NText {
-                                        text: modelData.description
-                                        pointSize: Style.fontSizeS
-                                        color: Color.mOnSurfaceVariant
-                                        elide: Text.ElideRight
-                                        Layout.fillWidth: true
-                                        visible: modelData.description.length > 0
-                                    }
-                                }
-
-                                MouseArea {
-                                    anchors.fill: parent
-                                    cursorShape: Qt.PointingHandCursor
-                                    onClicked: expandedSkill = isExpanded ? "" : modelData.name
-                                }
-                            }
-
-                            NButton {
-                                icon: isFavourite ? "star-filled" : "star"
-                                outlined: true
-                                Layout.preferredWidth: 36 * Style.uiScaleRatio
-                                textColor: isFavourite ? "#FFD700" : Color.mOnSurfaceVariant
-                                onClicked: main?.toggleFavourite(modelData.name)
-                            }
-
-                            NButton {
-                                text: "Run"
-                                icon: "player-play"
-                                outlined: true
-                                Layout.preferredWidth: 72 * Style.uiScaleRatio
-                                onClicked: main?.runSkill(modelData.name)
-                            }
-                        }
-
-                        Rectangle {
-                            Layout.fillWidth: true
-                            visible: isExpanded
-                            implicitHeight: overviewText.implicitHeight + Style.marginM * 2
-                            radius: Style.radiusS
-                            color: Color.mSurfaceVariant
-
-                            NText {
-                                id: overviewText
-                                anchors {
-                                    left: parent.left; right: parent.right
-                                    top: parent.top; margins: Style.marginM
-                                }
-                                text: modelData.detail || modelData.description
-                                pointSize: Style.fontSizeS
-                                color: Color.mOnSurfaceVariant
-                                wrapMode: Text.WordWrap
-                            }
-                        }
-                    }
-                }
-            }
-
             // ── Footer actions ────────────────────────────────────────────
             RowLayout {
                 Layout.fillWidth: true
@@ -771,9 +628,9 @@ Item {
                 NButton {
                     Layout.fillWidth: true
                     outlined: true
-                    text: showSkills ? "Hide Skills" : "Skills"
+                    text: "Skills"
                     icon: "sparkles"
-                    onClicked: showSkills = !showSkills
+                    onClicked: root.panelPage = "skills"
                 }
 
                 NButton {
@@ -785,6 +642,198 @@ Item {
                     onClicked: {
                         if (rcStatus === "stopped") main?.start()
                         else main?.restart()
+                    }
+                }
+            }
+        }
+
+        // ── Skills page ───────────────────────────────────────────────────
+        // Stand-alone page (like Usage) with a scrollable list — keeps the
+        // main panel a fixed height instead of growing tall with skills.
+        ColumnLayout {
+            anchors { fill: parent; margins: Style.marginL }
+            spacing: Style.marginM
+            visible: panelPage === "skills"
+
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: Style.marginS
+
+                NButton {
+                    icon: "arrow-left"
+                    outlined: true
+                    Layout.preferredWidth: 36 * Style.uiScaleRatio
+                    onClicked: { root.expandedSkill = ""; root.panelPage = "main" }
+                }
+
+                NText {
+                    text: "Skills"
+                    pointSize: Style.fontSizeL
+                    font.weight: Style.fontWeightSemiBold
+                    color: Color.mOnSurface
+                    Layout.fillWidth: true
+                }
+
+                NText {
+                    text: skillsCount + (skillsCount === 1 ? " skill" : " skills")
+                    pointSize: Style.fontSizeS
+                    color: Color.mOnSurfaceVariant
+                    opacity: 0.7
+                }
+            }
+
+            NDivider {}
+
+            Item {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+
+                Flickable {
+                    id: skillsFlick
+                    anchors { fill: parent; rightMargin: 10 * Style.uiScaleRatio }
+                    contentHeight: skillsCol.implicitHeight
+                    clip: true
+                    interactive: contentHeight > height + 1
+                    boundsBehavior: Flickable.StopAtBounds
+
+                    property bool needsScroll: contentHeight > height + 1
+
+                    ColumnLayout {
+                        id: skillsCol
+                        width: skillsFlick.width
+                        spacing: Style.marginXS
+
+                        NText {
+                            visible: skillsCount === 0
+                            Layout.fillWidth: true
+                            text: "No skills found.\nAdd commands to ~/.claude/commands/ as .md files."
+                            pointSize: Style.fontSizeS
+                            color: Color.mOnSurfaceVariant
+                            wrapMode: Text.WordWrap
+                            horizontalAlignment: Text.AlignHCenter
+                        }
+
+                        Repeater {
+                            model: main?.sortedSkills ?? []
+                            delegate: ColumnLayout {
+                                Layout.fillWidth: true
+                                spacing: Style.marginXS
+
+                                readonly property bool isFavourite: favSet.has(modelData.name)
+                                readonly property bool isExpanded: expandedSkill === modelData.name
+
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    spacing: Style.marginS
+
+                                    NIcon {
+                                        icon: isFavourite ? "star-filled" : "sparkles"
+                                        pointSize: Style.fontSizeM
+                                        color: Color.mOnSurfaceVariant
+                                    }
+
+                                    Item {
+                                        Layout.fillWidth: true
+                                        Layout.preferredHeight: textCol.implicitHeight
+
+                                        ColumnLayout {
+                                            id: textCol
+                                            anchors { left: parent.left; right: parent.right }
+                                            spacing: 1
+
+                                            NText {
+                                                text: modelData.name
+                                                pointSize: Style.fontSizeM
+                                                color: isExpanded ? Color.mOnSurface : Color.mOnSurface
+                                                font.weight: isExpanded ? Style.fontWeightSemiBold : Font.Normal
+                                                elide: Text.ElideRight
+                                                Layout.fillWidth: true
+                                            }
+
+                                            NText {
+                                                text: modelData.description
+                                                pointSize: Style.fontSizeS
+                                                color: Color.mOnSurfaceVariant
+                                                elide: Text.ElideRight
+                                                Layout.fillWidth: true
+                                                visible: modelData.description.length > 0
+                                            }
+                                        }
+
+                                        MouseArea {
+                                            anchors.fill: parent
+                                            cursorShape: Qt.PointingHandCursor
+                                            onClicked: expandedSkill = isExpanded ? "" : modelData.name
+                                        }
+                                    }
+
+                                    NButton {
+                                        icon: isFavourite ? "star-filled" : "star"
+                                        outlined: true
+                                        Layout.preferredWidth: 36 * Style.uiScaleRatio
+                                        textColor: Color.mOnSurfaceVariant
+                                        onClicked: main?.toggleFavourite(modelData.name)
+                                    }
+
+                                    NButton {
+                                        text: "Run"
+                                        icon: "player-play"
+                                        outlined: true
+                                        Layout.preferredWidth: 72 * Style.uiScaleRatio
+                                        onClicked: main?.runSkill(modelData.name)
+                                    }
+                                }
+
+                                Rectangle {
+                                    Layout.fillWidth: true
+                                    visible: isExpanded
+                                    implicitHeight: overviewText.implicitHeight + Style.marginM * 2
+                                    radius: Style.radiusS
+                                    color: Color.mSurfaceVariant
+
+                                    NText {
+                                        id: overviewText
+                                        anchors {
+                                            left: parent.left; right: parent.right
+                                            top: parent.top; margins: Style.marginM
+                                        }
+                                        text: modelData.detail || modelData.description
+                                        pointSize: Style.fontSizeS
+                                        color: Color.mOnSurfaceVariant
+                                        wrapMode: Text.WordWrap
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Scrollbar track + handle (same pattern as sessions list)
+                Rectangle {
+                    anchors.right: parent.right
+                    anchors.top: parent.top
+                    anchors.bottom: parent.bottom
+                    width: 5 * Style.uiScaleRatio
+                    radius: 3 * Style.uiScaleRatio
+                    color: Qt.rgba(Color.mOnSurface.r, Color.mOnSurface.g, Color.mOnSurface.b, 0.1)
+                    visible: skillsFlick.needsScroll
+
+                    Rectangle {
+                        width: parent.width
+                        radius: parent.radius
+                        color: Color.mOnSurface
+                        opacity: 0.55
+
+                        height: {
+                            if (!skillsFlick.needsScroll) return 0
+                            var ratio = skillsFlick.height / skillsFlick.contentHeight
+                            return Math.max(16 * Style.uiScaleRatio, skillsFlick.height * ratio)
+                        }
+                        y: {
+                            var scrollable = skillsFlick.contentHeight - skillsFlick.height
+                            if (scrollable <= 0) return 0
+                            return (skillsFlick.contentY / scrollable) * (skillsFlick.height - height)
+                        }
                     }
                 }
             }

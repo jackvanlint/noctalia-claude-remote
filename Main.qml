@@ -41,7 +41,8 @@ Item {
         interval: 300000   // every 5 min — matches the API's cache window
         repeat: true
         running: true
-        onTriggered: usageProc.running = true
+        // Guard: don't re-trigger if a previous poll is still running
+        onTriggered: { if (!usageProc.running) usageProc.running = true }
     }
 
     Process {
@@ -50,10 +51,24 @@ Item {
         command: ["python3", root.usagePath]
         stdout: StdioCollector {
             onStreamFinished: {
+                // Take the last non-empty line — handles any StdioCollector
+                // accumulation across repeated runs without losing data.
+                var lines = text.trim().split("\n")
+                var last = ""
+                for (var i = lines.length - 1; i >= 0; i--) {
+                    var l = lines[i].trim()
+                    if (l.startsWith("{")) { last = l; break }
+                }
+                if (!last) return
                 try {
-                    var d = JSON.parse(text.trim())
-                    root.pct5h       = d.pct_5h       ?? -1
-                    root.pct7d       = d.pct_7d       ?? -1
+                    var d = JSON.parse(last)
+                    // Only overwrite rate-limit percentages when the API
+                    // returned fresh data — avoids blanking bars on a
+                    // transient API failure.
+                    var p5  = d.pct_5h ?? -1
+                    var p7  = d.pct_7d ?? -1
+                    if (p5 >= 0 || root.pct5h < 0) root.pct5h = p5
+                    if (p7 >= 0 || root.pct7d < 0) root.pct7d = p7
                     root.reset5hMins = d.reset_5h_mins ?? 0
                     root.reset7dMins = d.reset_7d_mins ?? 0
                     root.tokensToday = d.tokens_today  ?? 0
