@@ -47,6 +47,8 @@ def mins_until(ts_str):
 
 creds_path = os.path.expanduser("~/.claude/.credentials.json")
 access_token = None
+plan_type = ""
+plan_tier = ""
 try:
     with open(creds_path) as f:
         creds = json.load(f)
@@ -56,6 +58,9 @@ try:
         access_token = obj.get("access_token") or obj.get("accessToken")
         if access_token:
             break
+    oauth_obj = creds.get("claudeAiOauth", creds)
+    plan_type = oauth_obj.get("subscriptionType", "") or ""
+    plan_tier = oauth_obj.get("rateLimitTier", "") or ""
 except Exception:
     pass
 
@@ -170,4 +175,6 @@ print(json.dumps({
     "prompts_7d":    prompts_7d,
     "api_ok":        api_ok,
     "days":          days_out,
+    "plan_type":     plan_type,
+    "plan_tier":     plan_tier,
 }))

@@ -21,15 +21,17 @@ Item {
     property var namedSessions: []
 
     // ── Usage stats ───────────────────────────────────────────────────────
-    property real pct5h:       -1.0  // 0–1 from API, -1 = unknown
-    property real pct7d:       -1.0
-    property int  reset5hMins: 0
-    property int  reset7dMins: 0
-    property int  tokensToday: 0
-    property int  prompts5h:   0
-    property int  prompts7d:   0
-    property bool apiOk:       false
-    property var  usageDays:   []    // [{date, tokens, prompts}] oldest→newest
+    property real   pct5h:       -1.0  // 0–1 from API, -1 = unknown
+    property real   pct7d:       -1.0
+    property int    reset5hMins: 0
+    property int    reset7dMins: 0
+    property int    tokensToday: 0
+    property int    prompts5h:   0
+    property int    prompts7d:   0
+    property bool   apiOk:       false
+    property var    usageDays:   []    // [{date, tokens, prompts}] oldest→newest
+    property string planType:    ""    // e.g. "claude_max_5x", "claude_pro"
+    property string planTier:    ""    // e.g. "standard", "priority"
 
     readonly property string usagePath:
         Qt.resolvedUrl("usage.py").toString().replace("file://", "")
@@ -59,6 +61,8 @@ Item {
                     root.prompts7d   = d.prompts_7d    ?? 0
                     root.apiOk       = d.api_ok        ?? false
                     root.usageDays   = d.days          ?? []
+                    root.planType    = d.plan_type      ?? ""
+                    root.planTier    = d.plan_tier      ?? ""
                 } catch(e) {}
             }
         }

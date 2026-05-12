@@ -20,8 +20,8 @@ Item {
     property real contentPreferredHeight: panelPage === "usage"
         ? 320 * Style.uiScaleRatio
         : Math.max(220,
-            340 +
-            namedCount * 38 + (namedCount > 0 ? 52 : 0) + 52 +
+            400 +
+            (namedCount > 0 ? Math.min(namedCount, 3) * 38 + 52 : 0) +
             (showSkills ? skillsCount * 54 + 44 + (expandedSkill !== "" ? 110 : 0) : 0)) * Style.uiScaleRatio
 
     function fmtTokens(t) {
@@ -42,6 +42,16 @@ Item {
         if (pct >= 0.9) return "#ef5350"
         if (pct >= 0.7) return "#ff9800"
         return Color.mPrimary
+    }
+
+    function planDisplay(t) {
+        if (!t) return ""
+        if (t === "claude_max_5x")  return "MAX 5×"
+        if (t === "claude_max_20x") return "MAX 20×"
+        if (t === "claude_max")     return "MAX"
+        if (t === "claude_pro")     return "PRO"
+        if (t === "claude_free")    return "FREE"
+        return t.replace(/^claude_/, "").replace(/_/g, " ").toUpperCase()
     }
 
     readonly property var    main:       pluginApi?.mainInstance
@@ -74,7 +84,25 @@ Item {
                 Layout.fillWidth: true
                 spacing: Style.marginS
 
-                NIcon { icon: "brain"; color: rcStatus === "connected" ? Color.mPrimary : Color.mOnSurfaceVariant; pointSize: Style.fontSizeXL }
+                // Plan badge — mirrors Connected badge style; tinted primary bg + primary text
+                Rectangle {
+                    width:  planText.implicitWidth + Style.marginM * 2
+                    height: planText.implicitHeight + Style.marginXS * 2
+                    radius: Style.radiusS
+                    color:  (main?.planType ?? "") !== ""
+                            ? Qt.rgba(Color.mPrimary.r, Color.mPrimary.g, Color.mPrimary.b, 0.15)
+                            : "transparent"
+
+                    NText {
+                        id: planText
+                        anchors.centerIn: parent
+                        text: planDisplay(main?.planType ?? "")
+                        pointSize: Style.fontSizeS
+                        color: Color.mPrimary
+                        font.weight: Font.Bold
+                        font.letterSpacing: 0.5
+                    }
+                }
 
                 NText {
                     text: "Claude Remote"
@@ -306,7 +334,7 @@ Item {
                 }
 
                 NText {
-                    visible: readyToStart
+                    visible: readyToStart && !(main?.preflightDone ?? false)
                     text: "Daemon is not running"
                     pointSize: Style.fontSizeM
                     color: Color.mOnSurfaceVariant
@@ -388,33 +416,85 @@ Item {
                     font.weight: Style.fontWeightSemiBold
                 }
 
-                Repeater {
-                    model: named
-                    delegate: RowLayout {
-                        Layout.fillWidth: true
-                        spacing: Style.marginS
+                Item {
+                    Layout.fillWidth: true
+                    implicitHeight: Math.min(namedCount, 3) * 38 * Style.uiScaleRatio
 
-                        Rectangle { width: 6; height: 6; radius: 3; color: "#4caf50" }
+                    Flickable {
+                        id: sessionsFlick
+                        anchors { fill: parent; rightMargin: 10 * Style.uiScaleRatio }
+                        contentHeight: sessionsCol.implicitHeight
+                        clip: true
+                        interactive: contentHeight > height + 1
 
-                        NText {
-                            text: modelData.name
-                            pointSize: Style.fontSizeM
-                            color: Color.mOnSurface
-                            Layout.fillWidth: true
-                            elide: Text.ElideRight
+                        property bool needsScroll: contentHeight > height + 1
+
+                        ColumnLayout {
+                            id: sessionsCol
+                            width: sessionsFlick.width
+                            spacing: Style.marginXS
+
+                            Repeater {
+                                model: named.slice().reverse()
+                                delegate: RowLayout {
+                                    Layout.fillWidth: true
+                                    spacing: Style.marginS
+
+                                    Rectangle { width: 6; height: 6; radius: 3; color: "#4caf50" }
+
+                                    NText {
+                                        text: modelData.name
+                                        pointSize: Style.fontSizeM
+                                        color: Color.mOnSurface
+                                        Layout.fillWidth: true
+                                        elide: Text.ElideRight
+                                    }
+
+                                    NButton {
+                                        text: "Stop"
+                                        icon: "player-stop"
+                                        outlined: true
+                                        Layout.preferredWidth: 72 * Style.uiScaleRatio
+                                        textColor: Color.mError
+                                        onClicked: main?.removeNamedSession(modelData.pid)
+                                    }
+                                }
+                            }
                         }
+                    }
 
-                        NButton {
-                            text: "Stop"
-                            icon: "player-stop"
-                            outlined: true
-                            Layout.preferredWidth: 72 * Style.uiScaleRatio
-                            textColor: Color.mError
-                            onClicked: main?.removeNamedSession(modelData.pid)
+                    // Scrollbar track + handle
+                    Rectangle {
+                        anchors.right: parent.right
+                        anchors.top: parent.top
+                        anchors.bottom: parent.bottom
+                        width: 5 * Style.uiScaleRatio
+                        radius: 3 * Style.uiScaleRatio
+                        color: Qt.rgba(Color.mOnSurface.r, Color.mOnSurface.g, Color.mOnSurface.b, 0.1)
+                        visible: sessionsFlick.needsScroll
+
+                        Rectangle {
+                            width: parent.width
+                            radius: parent.radius
+                            color: Color.mOnSurface
+                            opacity: 0.55
+
+                            height: {
+                                if (!sessionsFlick.needsScroll) return 0
+                                var ratio = sessionsFlick.height / sessionsFlick.contentHeight
+                                return Math.max(16 * Style.uiScaleRatio, sessionsFlick.height * ratio)
+                            }
+                            y: {
+                                var scrollable = sessionsFlick.contentHeight - sessionsFlick.height
+                                if (scrollable <= 0) return 0
+                                return (sessionsFlick.contentY / scrollable) * (sessionsFlick.height - height)
+                            }
                         }
                     }
                 }
             }
+
+            Item { Layout.fillHeight: true }
 
             // ── New named session ─────────────────────────────────────────
             NDivider {}
@@ -537,8 +617,6 @@ Item {
                     }
                 }
             }
-
-            Item { Layout.fillHeight: true }
 
             // ── Footer actions ────────────────────────────────────────────
             RowLayout {
