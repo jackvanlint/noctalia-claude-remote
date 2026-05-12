@@ -22,7 +22,12 @@ Item {
         : Math.max(220,
             400 +
             (namedCount > 0 ? Math.min(namedCount, 3) * 38 + 52 : 0) +
+            (quickLaunchVisible ? 70 : 0) +
             (showSkills ? skillsCount * 54 + 44 + (expandedSkill !== "" ? 110 : 0) : 0)) * Style.uiScaleRatio
+
+    Behavior on contentPreferredHeight {
+        NumberAnimation { duration: 220; easing.type: Easing.OutCubic }
+    }
 
     function fmtTokens(t) {
         if (t >= 1000000) return (t / 1000000).toFixed(1) + "M"
@@ -44,20 +49,73 @@ Item {
         return Color.mPrimary
     }
 
-    function planDisplay(t) {
+    // ── Plan badge — handles both bare ("pro", "max_5x") and prefixed
+    //    ("claude_pro") subscription strings returned by the API.
+    function planNorm(t) {
         if (!t) return ""
-        if (t === "claude_max_5x")  return "MAX 5×"
-        if (t === "claude_max_20x") return "MAX 20×"
-        if (t === "claude_max")     return "MAX"
-        if (t === "claude_pro")     return "PRO"
-        if (t === "claude_free")    return "FREE"
-        return t.replace(/^claude_/, "").replace(/_/g, " ").toUpperCase()
+        return t.toLowerCase().replace(/^claude_/, "")
+    }
+    function planDisplay(t) {
+        var s = planNorm(t)
+        if (!s) return ""
+        if (s === "max_5x")  return "MAX 5×"
+        if (s === "max_20x") return "MAX 20×"
+        if (s === "max")     return "MAX"
+        if (s === "pro")     return "PRO"
+        if (s === "free")    return "FREE"
+        return s.replace(/_/g, " ").toUpperCase()
+    }
+    function planTier(t) {
+        var s = planNorm(t)
+        if (!s) return ""
+        if (s.indexOf("max") >= 0) return "max"
+        if (s === "pro") return "pro"
+        if (s === "free") return "free"
+        return "other"
+    }
+    function planBg(t) {
+        var tier = planTier(t)
+        if (tier === "max")  return "#3a2e00"
+        if (tier === "pro")  return "#1a3a5f"
+        if (tier === "free") return "#2a2a2a"
+        if (tier === "other") return Color.mSurfaceVariant
+        return "transparent"
+    }
+    function planFg(t) {
+        var tier = planTier(t)
+        if (tier === "max")  return "#ffb74d"
+        if (tier === "pro")  return "#64b5f6"
+        if (tier === "free") return "#9e9e9e"
+        return Color.mOnSurfaceVariant
     }
 
     readonly property var    main:       pluginApi?.mainInstance
     readonly property string rcStatus:   main?.rcStatus ?? "stopped"
     readonly property var    named:      main?.namedSessions ?? []
     readonly property int    namedCount: named.length
+
+    // ── Quick-launch: favourites if any, else suggest top skills.
+    // The space below the sessions list otherwise sits empty, so we always
+    // fill it with something tappable to make the panel feel intentional.
+    readonly property int  quickLaunchMax: 6
+    readonly property bool quickLaunchUsesFavs: (main?.favourites?.length ?? 0) > 0
+    readonly property var  quickLaunchSkills: {
+        var all = main?.skills ?? []
+        if (all.length === 0) return []
+        if (quickLaunchUsesFavs) {
+            var favs = main?.favourites ?? []
+            var byName = {}
+            for (var i = 0; i < all.length; i++) byName[all[i].name] = all[i]
+            var out = []
+            for (var j = 0; j < favs.length && out.length < quickLaunchMax; j++) {
+                if (byName[favs[j]]) out.push(byName[favs[j]])
+            }
+            return out
+        }
+        // Fallback: first N skills, alphabetical (matches Repeater sort order)
+        return all.slice(0, quickLaunchMax)
+    }
+    readonly property bool quickLaunchVisible: !showSkills && quickLaunchSkills.length > 0
 
     // ── Derived state helpers ─────────────────────────────────────────────
     readonly property bool isStopped:     rcStatus === "stopped"
@@ -84,23 +142,22 @@ Item {
                 Layout.fillWidth: true
                 spacing: Style.marginS
 
-                // Plan badge — mirrors Connected badge style; tinted primary bg + primary text
+                // Plan badge — solid tinted pill, hidden when plan unknown
                 Rectangle {
-                    width:  planText.implicitWidth + Style.marginM * 2
-                    height: planText.implicitHeight + Style.marginXS * 2
+                    visible: planText.text !== ""
+                    Layout.preferredWidth:  planText.implicitWidth + Style.marginM * 2
+                    Layout.preferredHeight: planText.implicitHeight + Style.marginXS * 2 + 2
                     radius: Style.radiusS
-                    color:  (main?.planType ?? "") !== ""
-                            ? Qt.rgba(Color.mPrimary.r, Color.mPrimary.g, Color.mPrimary.b, 0.15)
-                            : "transparent"
+                    color:  planBg(main?.planType ?? "")
 
                     NText {
                         id: planText
                         anchors.centerIn: parent
                         text: planDisplay(main?.planType ?? "")
                         pointSize: Style.fontSizeS
-                        color: Color.mPrimary
+                        color: planFg(main?.planType ?? "")
                         font.weight: Font.Bold
-                        font.letterSpacing: 0.5
+                        font.letterSpacing: 0.8
                     }
                 }
 
@@ -113,8 +170,8 @@ Item {
                 }
 
                 Rectangle {
-                    width:  badge.implicitWidth + Style.marginM * 2
-                    height: badge.implicitHeight + Style.marginXS * 2
+                    Layout.preferredWidth:  badge.implicitWidth + Style.marginM * 2
+                    Layout.preferredHeight: badge.implicitHeight + Style.marginXS * 2 + 2
                     radius: Style.radiusS
                     color: (rcStatus === "connected" || namedCount > 0) ? "#1e4620" : rcStatus === "connecting" ? "#4a3200" : "#4a1212"
 
@@ -128,13 +185,13 @@ Item {
                 }
             }
 
-            NDivider {}
+            NDivider { visible: (main?.showUsage ?? true) && !showSkills }
 
             // ── Rate limit usage ──────────────────────────────────────────
             ColumnLayout {
                 Layout.fillWidth: true
                 spacing: Style.marginS
-                visible: main?.showUsage ?? true
+                visible: (main?.showUsage ?? true) && !showSkills
 
                 NText {
                     text: "Rate Limit Usage"
@@ -286,7 +343,7 @@ Item {
                 }
             }
 
-            NDivider { visible: main?.showUsage ?? true }
+            NDivider { visible: (main?.showUsage ?? true) && !showSkills }
 
             // ── Max sessions warning ──────────────────────────────────────
             RowLayout {
@@ -419,6 +476,9 @@ Item {
                 Item {
                     Layout.fillWidth: true
                     implicitHeight: Math.min(namedCount, 3) * 38 * Style.uiScaleRatio
+                    Behavior on implicitHeight {
+                        NumberAnimation { duration: 220; easing.type: Easing.OutCubic }
+                    }
 
                     Flickable {
                         id: sessionsFlick
@@ -435,7 +495,7 @@ Item {
                             spacing: Style.marginXS
 
                             Repeater {
-                                model: named.slice().reverse()
+                                model: named
                                 delegate: RowLayout {
                                     Layout.fillWidth: true
                                     spacing: Style.marginS
@@ -488,6 +548,91 @@ Item {
                                 var scrollable = sessionsFlick.contentHeight - sessionsFlick.height
                                 if (scrollable <= 0) return 0
                                 return (sessionsFlick.contentY / scrollable) * (sessionsFlick.height - height)
+                            }
+                        }
+                    }
+                }
+            }
+
+            // ── Quick Launch — chips that fill the previously-empty space ───
+            ColumnLayout {
+                Layout.fillWidth: true
+                spacing: Style.marginS
+                visible: quickLaunchVisible
+
+                NDivider {}
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: Style.marginXS
+
+                    NIcon {
+                        icon: quickLaunchUsesFavs ? "star-filled" : "sparkles"
+                        pointSize: Style.fontSizeS
+                        color: quickLaunchUsesFavs ? "#FFD700" : Color.mPrimary
+                        opacity: 0.85
+                    }
+
+                    NText {
+                        text: quickLaunchUsesFavs ? "Quick Launch" : "Suggested Skills"
+                        pointSize: Style.fontSizeS
+                        color: Color.mOnSurfaceVariant
+                        font.weight: Style.fontWeightSemiBold
+                        Layout.fillWidth: true
+                    }
+
+                    NText {
+                        visible: !quickLaunchUsesFavs
+                        text: "★ in Skills to pin"
+                        pointSize: Style.fontSizeS
+                        color: Color.mOnSurfaceVariant
+                        opacity: 0.5
+                    }
+                }
+
+                Flow {
+                    Layout.fillWidth: true
+                    spacing: Style.marginXS
+
+                    Repeater {
+                        model: quickLaunchSkills
+                        delegate: Rectangle {
+                            id: chip
+                            width: chipRow.implicitWidth + Style.marginM * 2
+                            height: chipRow.implicitHeight + Style.marginXS * 2 + 4
+                            radius: height / 2
+                            color: chipHover.containsMouse
+                                ? Qt.rgba(Color.mPrimary.r, Color.mPrimary.g, Color.mPrimary.b, 0.22)
+                                : Qt.rgba(Color.mPrimary.r, Color.mPrimary.g, Color.mPrimary.b, 0.12)
+                            border.width: 1
+                            border.color: Qt.rgba(Color.mPrimary.r, Color.mPrimary.g, Color.mPrimary.b, 0.28)
+                            Behavior on color { ColorAnimation { duration: 120 } }
+
+                            RowLayout {
+                                id: chipRow
+                                anchors.centerIn: parent
+                                spacing: 5
+
+                                NIcon {
+                                    icon: "player-play"
+                                    pointSize: Style.fontSizeS
+                                    color: Color.mPrimary
+                                }
+
+                                NText {
+                                    text: modelData.name
+                                    pointSize: Style.fontSizeS
+                                    color: Color.mPrimary
+                                    font.weight: Style.fontWeightSemiBold
+                                }
+                            }
+
+                            MouseArea {
+                                id: chipHover
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: main?.runSkill(modelData.name)
                             }
                         }
                     }
