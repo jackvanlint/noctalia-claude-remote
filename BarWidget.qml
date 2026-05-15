@@ -55,7 +55,7 @@ Item {
     property string tooltipText: {
         switch (rcStatus) {
             case "connected":
-                var name = main?.sessionName ?? ""
+                var name = main?.configuredName ?? ""
                 var n    = main?.activeSessions ?? 0
                 return "Claude Remote\n" + (name ? name : "Connected") + (n > 0 ? "\n" + n + " active session" + (n === 1 ? "" : "s") : "")
             case "connecting":
@@ -169,7 +169,7 @@ Item {
                         width: 28 * Style.uiScaleRatio
                         height: 16 * Style.uiScaleRatio
                         radius: height / 2
-                        color: (main?.autoStart ?? true) ? Color.mPrimary : Color.mSurfaceVariant
+                        color: (main?.autoStart ?? false) ? Color.mPrimary : Color.mSurfaceVariant
 
                         Behavior on color { ColorAnimation { duration: 120 } }
 
@@ -179,7 +179,7 @@ Item {
                             radius: height / 2
                             color: "white"
                             anchors.verticalCenter: parent.verticalCenter
-                            x: (main?.autoStart ?? true) ? parent.width - width - 2 : 2
+                            x: (main?.autoStart ?? false) ? parent.width - width - 2 : 2
 
                             Behavior on x { NumberAnimation { duration: 120; easing.type: Easing.InOutQuad } }
                         }

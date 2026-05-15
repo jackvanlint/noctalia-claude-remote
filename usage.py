@@ -43,6 +43,28 @@ def mins_until(ts_str):
     diff = (ts - datetime.now(timezone.utc)).total_seconds()
     return max(0, int(diff / 60))
 
+def iter_recent_jsonl(root, cutoff):
+    """Yield recent Claude transcript files without repeatedly reading history."""
+    if not os.path.isdir(root):
+        return
+    files = []
+    for dirpath, _, filenames in os.walk(root):
+        for fname in filenames:
+            if not fname.endswith(".jsonl"):
+                continue
+            path = os.path.join(dirpath, fname)
+            try:
+                if os.path.islink(path):
+                    continue
+                mtime = datetime.fromtimestamp(os.path.getmtime(path), tz=timezone.utc)
+            except OSError:
+                continue
+            if mtime >= cutoff:
+                files.append((mtime, path))
+    files.sort(reverse=True)
+    for _, path in files:
+        yield path
+
 # ── OAuth token ───────────────────────────────────────────────────────────────
 
 creds_path = os.path.expanduser("~/.claude/.credentials.json")
@@ -117,44 +139,39 @@ tokens_today = 0
 oldest_5h    = None
 oldest_7d    = None
 
-if os.path.isdir(proj):
-    for dirpath, _, filenames in os.walk(proj):
-        for fname in filenames:
-            if not fname.endswith(".jsonl"):
-                continue
-            try:
-                with open(os.path.join(dirpath, fname)) as f:
-                    for line in f:
-                        try:
-                            obj = json.loads(line)
-                            ts  = parse_ts(obj.get("timestamp", ""))
-                            if ts is None:
-                                continue
-                            day = ts.strftime("%Y-%m-%d")
+for path in iter_recent_jsonl(proj, seven_d_ago - timedelta(days=1)):
+    try:
+        with open(path) as f:
+            for line in f:
+                try:
+                    obj = json.loads(line)
+                    ts  = parse_ts(obj.get("timestamp", ""))
+                    if ts is None or ts < seven_d_ago:
+                        continue
+                    day = ts.strftime("%Y-%m-%d")
 
-                            if obj.get("type") == "user":
-                                if ts >= five_h_ago:
-                                    prompts_5h += 1
-                                    if oldest_5h is None or ts < oldest_5h:
-                                        oldest_5h = ts
-                                if ts >= seven_d_ago:
-                                    prompts_7d += 1
-                                    if oldest_7d is None or ts < oldest_7d:
-                                        oldest_7d = ts
-                                if day in day_prompts:
-                                    day_prompts[day] += 1
+                    if obj.get("type") == "user":
+                        if ts >= five_h_ago:
+                            prompts_5h += 1
+                            if oldest_5h is None or ts < oldest_5h:
+                                oldest_5h = ts
+                        prompts_7d += 1
+                        if oldest_7d is None or ts < oldest_7d:
+                            oldest_7d = ts
+                        if day in day_prompts:
+                            day_prompts[day] += 1
 
-                            elif obj.get("type") == "assistant":
-                                usage = obj.get("message", {}).get("usage", {})
-                                t = usage.get("input_tokens", 0) + usage.get("output_tokens", 0)
-                                if day == today:
-                                    tokens_today += t
-                                if day in day_tokens:
-                                    day_tokens[day] += t
-                        except Exception:
-                            pass
-            except Exception:
-                pass
+                    elif obj.get("type") == "assistant":
+                        usage = obj.get("message", {}).get("usage", {})
+                        t = usage.get("input_tokens", 0) + usage.get("output_tokens", 0)
+                        if day == today:
+                            tokens_today += t
+                        if day in day_tokens:
+                            day_tokens[day] += t
+                except Exception:
+                    pass
+    except Exception:
+        pass
 
 # Fallback reset times from local counts
 if not api_ok:

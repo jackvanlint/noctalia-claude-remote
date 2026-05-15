@@ -19,6 +19,8 @@ Item {
 
     // ── Named extra sessions: [{name, pid}] ───────────────────────────────
     property var namedSessions: []
+    property bool spawnInFlight: false
+    property string namedSessionError: ""
 
     // ── Usage stats ───────────────────────────────────────────────────────
     property real   pct5h:       -1.0  // 0–1 from API, -1 = unknown
@@ -124,12 +126,12 @@ Item {
     readonly property string workspaceDir:
         pluginApi?.pluginSettings?.workspaceDir || ""
     readonly property bool autoStart:
-        pluginApi?.pluginSettings?.autoStart ?? true
+        pluginApi?.pluginSettings?.autoStart ?? false
     readonly property bool showUsage:
         pluginApi?.pluginSettings?.showUsage ?? true
 
     function toggleAutoStart() {
-        var val = !(pluginApi?.pluginSettings?.autoStart ?? true)
+        var val = !(pluginApi?.pluginSettings?.autoStart ?? false)
         pluginApi.pluginSettings.autoStart = val
         pluginApi.saveSettings()
     }
@@ -171,7 +173,8 @@ Item {
         id: countProc
         running: false
         command: ["sh", "-c",
-            "pgrep -P " + rcProcess.pid + " | wc -l 2>/dev/null || echo 0"]
+            "pgrep -P \"$1\" 2>/dev/null | wc -l || echo 0",
+            "_", rcProcess.pid.toString()]
         stdout: StdioCollector {
             onStreamFinished: {
                 var n = parseInt(text.trim());
@@ -240,10 +243,31 @@ Item {
     }
 
     // ── Named session management ──────────────────────────────────────────
+    function validProcId(value) {
+        return /^[1-9][0-9]*$/.test(String(value))
+    }
+
+    function procAliveCmd(pid, startTime) {
+        var p = String(pid)
+        var st = String(startTime || "")
+        if (!validProcId(p) || !/^[0-9]+$/.test(st)) return ""
+        return '(pid=' + p + '; start=' + st +
+               '; stat=$(awk "{print \\$22}" /proc/$pid/stat 2>/dev/null) || exit 0' +
+               '; [ "$stat" = "$start" ] || exit 0' +
+               '; tr "\\000" " " < /proc/$pid/cmdline 2>/dev/null | grep -Fq "remote-control" || exit 0' +
+               '; echo $pid)'
+    }
+
     function addNamedSession(topic) {
+        if (spawnInFlight || spawnProc.running) {
+            root.namedSessionError = "A session is already starting"
+            return
+        }
         var name = topic.startsWith("Remote Session:")
             ? topic.trim()
             : "Remote Session: " + topic.trim();
+        root.namedSessionError = ""
+        root.spawnInFlight = true
         spawnProc.pendingName = name;
         spawnProc.running = true;
     }
@@ -253,23 +277,56 @@ Item {
         property string pendingName: ""
         running: false
         command: [root.scriptPath, pendingName, root.claudeBin, root.workspaceDir]
+        onExited: (exitCode, exitStatus) => {
+            root.spawnInFlight = false
+            if (exitCode !== 0 && !root.namedSessionError) {
+                root.namedSessionError = "Session failed to start"
+            }
+        }
         stdout: StdioCollector {
             onStreamFinished: {
-                var pid = parseInt(text.trim());
-                if (pid > 0) {
-                    root.namedSessions = root.namedSessions.concat([{
-                        name: spawnProc.pendingName,
-                        pid:  pid
-                    }]);
-                    Logger.i("ClaudeRemote",
-                        "Started '" + spawnProc.pendingName + "' PID " + pid);
+                var lines = text.trim().split("\n")
+                var last = lines.length > 0 ? lines[lines.length - 1].trim() : ""
+                if (!last) return
+                try {
+                    var d = JSON.parse(last)
+                    var pid = parseInt(d.pid)
+                    var startTime = String(d.start_time || "")
+                    if (d.ok && pid > 0 && /^[0-9]+$/.test(startTime)) {
+                        root.namedSessions = root.namedSessions.concat([{
+                            name: spawnProc.pendingName,
+                            pid:  pid,
+                            startTime: startTime
+                        }]);
+                        root.namedSessionError = ""
+                        Logger.i("ClaudeRemote",
+                            "Started '" + spawnProc.pendingName + "' PID " + pid);
+                    } else {
+                        root.namedSessionError = d.error || "Session failed to start"
+                        Logger.i("ClaudeRemote", "Session launch failed: " + root.namedSessionError);
+                    }
+                } catch(e) {
+                    root.namedSessionError = "Session launcher returned invalid output"
+                    Logger.i("ClaudeRemote", root.namedSessionError + ": " + last);
                 }
             }
         }
     }
 
     function removeNamedSession(pid) {
+        var session = null
+        for (var i = 0; i < root.namedSessions.length; i++) {
+            if (root.namedSessions[i].pid === pid) {
+                session = root.namedSessions[i]
+                break
+            }
+        }
+        if (!session || !session.startTime) {
+            pruneProc.running = true
+            return
+        }
         killProc.targetPid = pid;
+        killProc.targetStartTime = String(session.startTime);
         killProc.running   = true;
         root.namedSessions = root.namedSessions.filter(s => s.pid !== pid);
     }
@@ -277,8 +334,16 @@ Item {
     Process {
         id: killProc
         property int targetPid: 0
+        property string targetStartTime: ""
         running: false
-        command: ["kill", targetPid.toString()]
+        command: ["sh", "-c",
+            'pid="$1"; start="$2"; ' +
+            'case "$pid:$start" in (*[!0-9:]*|:*) exit 0;; esac; ' +
+            'stat=$(awk "{print \\$22}" "/proc/$pid/stat" 2>/dev/null) || exit 0; ' +
+            '[ "$stat" = "$start" ] || exit 0; ' +
+            'tr "\\000" " " < "/proc/$pid/cmdline" 2>/dev/null | grep -Fq "remote-control" || exit 0; ' +
+            'kill "$pid"',
+            "_", targetPid.toString(), targetStartTime]
     }
 
     // Prune dead extra sessions every 10 s
@@ -296,9 +361,10 @@ Item {
 
         function buildPruneCmd() {
             if (root.namedSessions.length === 0) return "true";
-            return root.namedSessions
-                .map(s => "kill -0 " + s.pid + " 2>/dev/null && echo " + s.pid)
-                .join("; ");
+            var checks = root.namedSessions
+                .map(s => root.procAliveCmd(s.pid, s.startTime))
+                .filter(s => s.length > 0)
+            return checks.length > 0 ? checks.join("; ") : "true";
         }
 
         stdout: StdioCollector {

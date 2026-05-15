@@ -122,6 +122,10 @@ for f in "${PLUGIN_FILES[@]}"; do
         warn "Missing file: $f (skipped)"
         continue
     fi
+    if [[ -e "$PLUGIN_DIR/$f" && "$src" -ef "$PLUGIN_DIR/$f" ]]; then
+        ok "$f already in place"
+        continue
+    fi
     cp "$src" "$PLUGIN_DIR/$f"
     ok "Copied $f"
 done
@@ -160,21 +164,12 @@ else:
 hooks = settings.setdefault("hooks", {})
 stop_hooks = hooks.setdefault("Stop", [])
 
-# Already registered?
+# Already registered for this plugin path?
 for entry in stop_hooks:
     for h in entry.get("hooks", []):
         cmd = h.get("command", "")
-        if cmd == hook_path or cmd.endswith("/auto-title.py"):
-            # Update path in case the plugin moved
-            if cmd != hook_path:
-                h["command"] = hook_path
-                tmp = settings_file.with_suffix(".tmp")
-                with open(tmp, "w") as f:
-                    json.dump(settings, f, indent=2)
-                os.replace(tmp, settings_file)
-                print("UPDATED")
-            else:
-                print("ALREADY")
+        if cmd == hook_path:
+            print("ALREADY")
             sys.exit(0)
 
 stop_hooks.append({
@@ -192,7 +187,6 @@ PYEOF
 
 case "$hook_result" in
     ADDED)    ok "Registered auto-title Stop hook in $CLAUDE_SETTINGS" ;;
-    UPDATED)  ok "Updated auto-title hook path in $CLAUDE_SETTINGS" ;;
     ALREADY)  ok "Auto-title hook already registered" ;;
     INVALID)  warn "$CLAUDE_SETTINGS is not valid JSON — skipped hook registration"
               info "Fix or remove the file and re-run install.sh to enable auto-title." ;;
@@ -212,6 +206,8 @@ else
   "claudeBin": "claude",
   "terminalBin": "$DETECTED_TERMINAL",
   "workspaceDir": "~",
+  "autoStart": false,
+  "showUsage": true,
   "favouriteSkills": []
 }
 EOF

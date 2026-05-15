@@ -1,7 +1,7 @@
 {
   "id": "claude-remote",
   "name": "Claude Remote",
-  "version": "1.6.0",
+  "version": "1.6.1",
   "minNoctaliaVersion": "3.6.0",
   "author": "Jack Vanlint <277274540+jackvanlint@users.noreply.github.com>",
   "description": "Runs claude remote-control in the background and shows live status in the bar",
@@ -21,7 +21,7 @@
       "claudeBin": "claude",
       "terminalBin": "kitty",
       "workspaceDir": "~",
-      "autoStart": true,
+      "autoStart": false,
       "showUsage": true,
       "favouriteSkills": []
     }

@@ -74,8 +74,8 @@ for entry in stop_hooks:
     kept = []
     for h in inner:
         cmd = h.get("command", "")
-        # Match either the plugin path or any auto-title.py path
-        if cmd.startswith(plugin_dir) or cmd.endswith("/auto-title.py"):
+        # Only remove this plugin's hook. Other tools may also use auto-title.py.
+        if cmd == os.path.join(plugin_dir, "auto-title.py"):
             removed += 1
             continue
         kept.append(h)

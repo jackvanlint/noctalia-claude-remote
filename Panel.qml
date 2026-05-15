@@ -611,13 +611,23 @@ Item {
 
             NButton {
                 Layout.fillWidth: true
-                text: "New Session"
+                enabled: !(main?.spawnInFlight ?? false)
+                text: (main?.spawnInFlight ?? false) ? "Starting Session…" : "New Session"
                 icon: "plus"
                 onClicked: {
                     var now = new Date()
                     var hhmm = now.getHours().toString().padStart(2, "0") + ":" + now.getMinutes().toString().padStart(2, "0")
                     main?.addNamedSession("Remote Session: " + hhmm)
                 }
+            }
+
+            NText {
+                visible: (main?.namedSessionError ?? "").length > 0
+                Layout.fillWidth: true
+                text: main?.namedSessionError ?? ""
+                pointSize: Style.fontSizeS
+                color: Color.mError
+                wrapMode: Text.WordWrap
             }
 
             // ── Footer actions ────────────────────────────────────────────
