@@ -34,7 +34,7 @@ def normalize_util(v):
         return -1.0
     if n < 0:
         return -1.0
-    return min(1.0, n / 100.0 if n > 1.0 else n)
+    return min(1.0, n / 100.0)
 
 def mins_until(ts_str):
     ts = parse_ts(ts_str)
